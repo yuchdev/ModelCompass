@@ -147,7 +147,7 @@ def test_version_zero_migrates_and_future_schema_is_rejected(tmp_path: Path) -> 
         version = connection.execute(
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()[0]
-    assert version == "1"
+    assert version == "2"
 
     unsupported_path = tmp_path / "future.db"
     with sqlite3.connect(unsupported_path) as connection:
@@ -169,6 +169,30 @@ def test_version_zero_migrates_and_future_schema_is_rejected(tmp_path: Path) -> 
         connection.execute("INSERT INTO metadata (key, value) VALUES ('schema_version', '1')")
     with pytest.raises(ObservationStoreError, match="incomplete"):
         SQLiteObservationStore(incomplete_path).query_observations()
+
+
+@pytest.mark.integration
+def test_version_one_moves_payloads_out_of_observation_table(tmp_path: Path) -> None:
+    path = tmp_path / "legacy-payloads.db"
+    store = SQLiteObservationStore(path, payload_policy=PayloadPolicy.FULL)
+    store.record_observation(_observation("legacy"))
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM observation_payloads")
+        connection.execute("ALTER TABLE observations ADD COLUMN prompt TEXT")
+        connection.execute("ALTER TABLE observations ADD COLUMN response TEXT")
+        connection.execute(
+            "UPDATE observations SET prompt = 'legacy prompt', response = 'legacy response'"
+        )
+        connection.execute("UPDATE metadata SET value = '1' WHERE key = 'schema_version'")
+
+    migrated = SQLiteObservationStore(path, payload_policy=PayloadPolicy.FULL)
+    observation = migrated.query_observations()[0]
+    assert observation.prompt == "legacy prompt"
+    assert observation.response == "legacy response"
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(observations)")}
+    assert "prompt" not in columns
+    assert "response" not in columns
 
 
 @pytest.mark.integration

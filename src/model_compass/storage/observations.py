@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import sqlite3
@@ -21,13 +22,19 @@ from model_compass.domain import (
     PayloadPolicy,
     QualityEvidence,
 )
-from model_compass.exceptions import ModelCompassError
+from model_compass.exceptions import ModelCompassError, StorageError
 from model_compass.metrics.observations import ObservationSummary, summarize_observations
+from model_compass.metrics.task_observations import (
+    Observation as TaskObservation,
+)
+from model_compass.metrics.task_observations import (
+    QualityEvidence as TaskQualityEvidence,
+)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
-class ObservationStoreError(ModelCompassError):
+class ObservationStoreError(StorageError):
     """Base exception for observation storage failures."""
 
 
@@ -63,8 +70,22 @@ class SQLiteObservationStore:
         self.record_observations([observation], deduplicate=deduplicate)
         return _apply_payload_policy(observation, self.payload_policy)
 
+    def record(self, observation: TaskObservation) -> None:
+        """Store a task-selection observation using the shared persistent schema."""
+        self.record_observation(_stored_observation(observation))
+
+    def list(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> builtins.list[TaskObservation]:
+        """Return observations in the task-selection API's normalized shape."""
+        return [
+            _task_observation(row)
+            for row in self.query_observations(model_id=model_id, task=task)
+            if row.latency_ms is not None
+        ]
+
     def record_observations(
-        self, observations: list[Observation], *, deduplicate: bool = False
+        self, observations: builtins.list[Observation], *, deduplicate: bool = False
     ) -> int:
         if not observations:
             return 0
@@ -78,7 +99,19 @@ class SQLiteObservationStore:
                 f"VALUES ({placeholders})",
                 [_observation_values(row) for row in prepared],
             )
-            return connection.total_changes - before
+            recorded = connection.total_changes - before
+            payloads = [
+                (row.observation_id, row.prompt, row.response)
+                for row in prepared
+                if row.prompt is not None or row.response is not None
+            ]
+            if payloads:
+                connection.executemany(
+                    f"{verb} INTO observation_payloads (observation_id, prompt, response) "
+                    "VALUES (?, ?, ?)",
+                    payloads,
+                )
+            return recorded
 
     def query_observations(
         self,
@@ -90,7 +123,7 @@ class SQLiteObservationStore:
         recent: timedelta | None = None,
         now_utc: datetime | None = None,
         limit: int | None = None,
-    ) -> list[Observation]:
+    ) -> builtins.list[Observation]:
         filters, values = _observation_filters(
             model_id=model_id,
             task=task,
@@ -100,7 +133,10 @@ class SQLiteObservationStore:
             now_utc=now_utc,
             limit=limit,
         )
-        sql = "SELECT * FROM observations"
+        sql = (
+            "SELECT observations.*, observation_payloads.prompt, observation_payloads.response "
+            "FROM observations LEFT JOIN observation_payloads USING (observation_id)"
+        )
         if filters:
             sql += " WHERE " + " AND ".join(filters)
         sql += " ORDER BY timestamp, observation_id"
@@ -174,7 +210,7 @@ class SQLiteObservationStore:
             )
         return run
 
-    def query_benchmark_runs(self) -> list[BenchmarkRun]:
+    def query_benchmark_runs(self) -> builtins.list[BenchmarkRun]:
         with self._connection() as connection:
             self._ensure_schema(connection)
             rows = connection.execute("SELECT * FROM benchmark_runs ORDER BY run_id")
@@ -190,7 +226,9 @@ class SQLiteObservationStore:
             )
         return result
 
-    def query_benchmark_results(self, *, run_id: str | None = None) -> list[BenchmarkResult]:
+    def query_benchmark_results(
+        self, *, run_id: str | None = None
+    ) -> builtins.list[BenchmarkResult]:
         sql = "SELECT * FROM benchmark_results"
         values: tuple[str, ...] = ()
         if run_id is not None:
@@ -201,7 +239,11 @@ class SQLiteObservationStore:
             self._ensure_schema(connection)
             return [_benchmark_result_from_row(row) for row in connection.execute(sql, values)]
 
-    def record_quality_evidence(self, evidence: QualityEvidence) -> QualityEvidence:
+    def record_quality_evidence(
+        self, evidence: QualityEvidence | TaskQualityEvidence
+    ) -> QualityEvidence | TaskQualityEvidence:
+        if isinstance(evidence, TaskQualityEvidence):
+            evidence = _stored_quality_evidence(evidence)
         with self._transaction() as connection:
             connection.execute(
                 """INSERT INTO quality_evidence (
@@ -222,11 +264,20 @@ class SQLiteObservationStore:
             )
         return evidence
 
+    def list_quality_evidence(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> builtins.list[TaskQualityEvidence]:
+        """Return quality evidence in the task-selection API's normalized shape."""
+        return [
+            _task_quality_evidence(row)
+            for row in self.query_quality_evidence(model_id=model_id, task=task)
+        ]
+
     def query_quality_evidence(
         self, *, model_id: str | None = None, task: str | None = None
-    ) -> list[QualityEvidence]:
-        filters: list[str] = []
-        values: list[str] = []
+    ) -> builtins.list[QualityEvidence]:
+        filters: builtins.list[str] = []
+        values: builtins.list[str] = []
         if model_id is not None:
             filters.append("model_id = ?")
             values.append(model_id)
@@ -271,7 +322,7 @@ class SQLiteObservationStore:
         )
 
     def import_jsonl(self, content: str, *, deduplicate: bool = False) -> int:
-        records: list[tuple[int, Observation | BenchmarkResult]] = []
+        records: builtins.list[tuple[int, Observation | BenchmarkResult]] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
             if not line.strip():
                 continue
@@ -292,9 +343,7 @@ class SQLiteObservationStore:
                     if not isinstance(record_data, dict):
                         raise TypeError("observation record must be an object")
                     if "observation_id" not in record_data or "timestamp" not in record_data:
-                        raise ValueError(
-                            "observation record requires observation_id and timestamp"
-                        )
+                        raise ValueError("observation record requires observation_id and timestamp")
                     records.append((line_number, Observation.model_validate(record_data)))
                 elif kind == "benchmark_result":
                     records.append(
@@ -376,8 +425,14 @@ class SQLiteObservationStore:
                 yield self._memory_connection
             else:
                 path = Path(self.path)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                connection = sqlite3.connect(path, timeout=5)
+                try:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    raise ObservationStoreError("storage directory could not be created") from exc
+                try:
+                    connection = sqlite3.connect(path, timeout=5)
+                except sqlite3.Error as exc:
+                    raise ObservationStoreError("could not open analytics database") from exc
                 try:
                     _configure(connection)
                     yield connection
@@ -417,7 +472,7 @@ class SQLiteObservationStore:
         if version < 0:
             raise ObservationStoreError(f"invalid database schema version: {version}")
         if version == 0:
-            _create_schema_v1(connection)
+            _create_schema_v2(connection)
             connection.execute(
                 "INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
@@ -426,8 +481,29 @@ class SQLiteObservationStore:
                 "INSERT OR IGNORE INTO metadata (key, value) VALUES ('created_at', ?)",
                 (_timestamp(datetime.now(UTC)),),
             )
+        elif version == 1:
+            _migrate_schema_v1(connection)
+            connection.execute(
+                "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+                (str(SCHEMA_VERSION),),
+            )
         else:
             _ensure_tables(connection)
+
+
+class ObservationStore(SQLiteObservationStore):
+    """Eagerly initialized compatibility facade for the task-selection API."""
+
+    def __init__(self, database: str | Path) -> None:
+        super().__init__(database)
+        with self._connection() as connection:
+            self._ensure_schema(connection)
+
+    def record(self, observation: TaskObservation) -> None:
+        try:
+            super().record(observation)
+        except sqlite3.Error as exc:
+            raise ObservationStoreError("database operation failed") from exc
 
 
 class InMemoryObservationStore:
@@ -447,8 +523,22 @@ class InMemoryObservationStore:
         self.record_observations([observation], deduplicate=deduplicate)
         return _apply_payload_policy(observation, self.payload_policy)
 
+    def record(self, observation: TaskObservation) -> None:
+        """Store a task-selection observation using the in-memory schema."""
+        self.record_observation(_stored_observation(observation))
+
+    def list(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> builtins.list[TaskObservation]:
+        """Return observations in the task-selection API's normalized shape."""
+        return [
+            _task_observation(row)
+            for row in self.query_observations(model_id=model_id, task=task)
+            if row.latency_ms is not None
+        ]
+
     def record_observations(
-        self, observations: list[Observation], *, deduplicate: bool = False
+        self, observations: builtins.list[Observation], *, deduplicate: bool = False
     ) -> int:
         prepared = [_apply_payload_policy(row, self.payload_policy) for row in observations]
         with self._lock:
@@ -473,7 +563,7 @@ class InMemoryObservationStore:
         recent: timedelta | None = None,
         now_utc: datetime | None = None,
         limit: int | None = None,
-    ) -> list[Observation]:
+    ) -> builtins.list[Observation]:
         _, _ = _observation_filters(
             model_id=model_id,
             task=task,
@@ -553,7 +643,7 @@ class InMemoryObservationStore:
             self._runs[run.run_id] = run
         return run
 
-    def query_benchmark_runs(self) -> list[BenchmarkRun]:
+    def query_benchmark_runs(self) -> builtins.list[BenchmarkRun]:
         with self._lock:
             return sorted(self._runs.values(), key=lambda run: run.run_id)
 
@@ -565,7 +655,9 @@ class InMemoryObservationStore:
             self._results[key] = result
         return result
 
-    def query_benchmark_results(self, *, run_id: str | None = None) -> list[BenchmarkResult]:
+    def query_benchmark_results(
+        self, *, run_id: str | None = None
+    ) -> builtins.list[BenchmarkResult]:
         with self._lock:
             return sorted(
                 (
@@ -576,16 +668,29 @@ class InMemoryObservationStore:
                 key=lambda row: (row.run_id, row.case_id, row.model_id),
             )
 
-    def record_quality_evidence(self, evidence: QualityEvidence) -> QualityEvidence:
+    def record_quality_evidence(
+        self, evidence: QualityEvidence | TaskQualityEvidence
+    ) -> QualityEvidence | TaskQualityEvidence:
+        if isinstance(evidence, TaskQualityEvidence):
+            evidence = _stored_quality_evidence(evidence)
         with self._lock:
             if evidence.evidence_id in self._evidence:
                 raise ValueError("evidence_id must be unique")
             self._evidence[evidence.evidence_id] = evidence
         return evidence
 
+    def list_quality_evidence(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> builtins.list[TaskQualityEvidence]:
+        """Return quality evidence in the task-selection API's normalized shape."""
+        return [
+            _task_quality_evidence(row)
+            for row in self.query_quality_evidence(model_id=model_id, task=task)
+        ]
+
     def query_quality_evidence(
         self, *, model_id: str | None = None, task: str | None = None
-    ) -> list[QualityEvidence]:
+    ) -> builtins.list[QualityEvidence]:
         with self._lock:
             return sorted(
                 (
@@ -628,7 +733,7 @@ class InMemoryObservationStore:
         )
 
     def import_jsonl(self, content: str, *, deduplicate: bool = False) -> int:
-        records: list[tuple[int, Observation | BenchmarkResult]] = []
+        records: builtins.list[tuple[int, Observation | BenchmarkResult]] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
             if not line.strip():
                 continue
@@ -648,9 +753,7 @@ class InMemoryObservationStore:
                     if not isinstance(record_data, dict):
                         raise TypeError("observation record must be an object")
                     if "observation_id" not in record_data or "timestamp" not in record_data:
-                        raise ValueError(
-                            "observation record requires observation_id and timestamp"
-                        )
+                        raise ValueError("observation record requires observation_id and timestamp")
                     records.append((line_number, Observation.model_validate(record_data)))
                 elif envelope.get("record_type") == "benchmark_result":
                     records.append(
@@ -719,8 +822,6 @@ _OBSERVATION_COLUMNS = (
     "finish_reason",
     "request_fingerprint",
     "metadata_json",
-    "prompt",
-    "response",
 )
 
 
@@ -731,7 +832,7 @@ def _configure(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys = ON")
 
 
-def _create_schema_v1(connection: sqlite3.Connection) -> None:
+def _create_schema_v2(connection: sqlite3.Connection) -> None:
     connection.execute(
         """CREATE TABLE IF NOT EXISTS observations (
             observation_id TEXT PRIMARY KEY,
@@ -759,11 +860,10 @@ def _create_schema_v1(connection: sqlite3.Connection) -> None:
             time_to_first_token_ms TEXT,
             finish_reason TEXT,
             request_fingerprint TEXT,
-            metadata_json TEXT NOT NULL,
-            prompt TEXT,
-            response TEXT
+            metadata_json TEXT NOT NULL
         )"""
     )
+    _create_payload_table(connection)
     connection.execute(
         """CREATE TABLE IF NOT EXISTS benchmark_runs (
             run_id TEXT PRIMARY KEY,
@@ -811,9 +911,35 @@ def _create_schema_v1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _create_payload_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS observation_payloads (
+            observation_id TEXT PRIMARY KEY REFERENCES observations(observation_id)
+                ON DELETE CASCADE,
+            prompt TEXT,
+            response TEXT
+        )"""
+    )
+
+
+def _migrate_schema_v1(connection: sqlite3.Connection) -> None:
+    _create_payload_table(connection)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(observations)")}
+    if {"prompt", "response"} <= columns:
+        connection.execute(
+            """INSERT INTO observation_payloads (observation_id, prompt, response)
+            SELECT observation_id, prompt, response FROM observations
+            WHERE prompt IS NOT NULL OR response IS NOT NULL"""
+        )
+        connection.execute("ALTER TABLE observations DROP COLUMN prompt")
+        connection.execute("ALTER TABLE observations DROP COLUMN response")
+    _ensure_tables(connection)
+
+
 def _ensure_tables(connection: sqlite3.Connection) -> None:
     required = {
         "observations",
+        "observation_payloads",
         "benchmark_runs",
         "benchmark_results",
         "quality_evidence",
@@ -846,15 +972,15 @@ def _observation_filters(
     recent: timedelta | None,
     now_utc: datetime | None,
     limit: int | None,
-) -> tuple[list[str], list[Any]]:
+) -> tuple[builtins.list[str], builtins.list[Any]]:
     if since is not None and recent is not None:
         raise ValueError("specify either since or recent, not both")
     if recent is not None and recent.total_seconds() < 0:
         raise ValueError("recent duration must be non-negative")
     if limit is not None and limit < 0:
         raise ValueError("limit must be non-negative")
-    filters: list[str] = []
-    values: list[Any] = []
+    filters: builtins.list[str] = []
+    values: builtins.list[Any] = []
     for column, value in (("model_id", model_id), ("task", task), ("endpoint", endpoint)):
         if value is not None:
             filters.append(f"{column} = ?")
@@ -893,8 +1019,6 @@ def _observation_values(row: Observation) -> tuple[Any, ...]:
         row.finish_reason,
         row.request_fingerprint,
         _json(row.metadata),
-        row.prompt,
-        row.response,
     )
 
 
@@ -946,6 +1070,80 @@ def _quality_evidence_from_row(row: sqlite3.Row) -> QualityEvidence:
     data["observed_at"] = datetime.fromisoformat(data["observed_at"].replace("Z", "+00:00"))
     data["metadata"] = json.loads(data.pop("metadata_json"))
     return QualityEvidence.model_validate(data)
+
+
+_COMPATIBILITY_METADATA_KEY = "__model_compass_task_selection__"
+
+
+def _stored_observation(observation: TaskObservation) -> Observation:
+    return Observation(
+        timestamp=observation.timestamp,
+        model_id=observation.model_id,
+        endpoint=observation.endpoint_id,
+        task=observation.task,
+        success=observation.succeeded,
+        input_tokens=observation.input_tokens,
+        output_tokens=observation.output_tokens,
+        actual_cost=observation.actual_cost_usd,
+        latency_ms=Decimal(observation.latency_ms),
+        metadata={
+            _COMPATIBILITY_METADATA_KEY: {
+                "quality_score": str(observation.quality_score)
+                if observation.quality_score is not None
+                else None,
+                "evaluator_type": observation.evaluator_type,
+            }
+        },
+    )
+
+
+def _task_observation(observation: Observation) -> TaskObservation:
+    compatibility_data = observation.metadata.get(_COMPATIBILITY_METADATA_KEY, {})
+    quality_score = (
+        compatibility_data.get("quality_score") if isinstance(compatibility_data, dict) else None
+    )
+    evaluator_type = (
+        compatibility_data.get("evaluator_type") if isinstance(compatibility_data, dict) else None
+    )
+    return TaskObservation(
+        model_id=observation.model_id,
+        task=observation.task or "general",
+        timestamp=observation.timestamp,
+        endpoint_id=observation.endpoint,
+        succeeded=observation.success,
+        latency_ms=int(observation.latency_ms or 0),
+        actual_cost_usd=observation.actual_cost,
+        input_tokens=observation.input_tokens,
+        output_tokens=observation.output_tokens,
+        quality_score=quality_score,
+        evaluator_type=evaluator_type,
+    )
+
+
+def _stored_quality_evidence(evidence: TaskQualityEvidence) -> QualityEvidence:
+    return QualityEvidence(
+        model_id=evidence.model_id,
+        task=evidence.task,
+        score=evidence.quality_score,
+        evaluator=evidence.evaluator_type,
+        source=evidence.source,
+        sample_count=evidence.sample_size,
+        observed_at=evidence.evaluated_at,
+        metadata={"dataset": evidence.dataset} if evidence.dataset is not None else {},
+    )
+
+
+def _task_quality_evidence(evidence: QualityEvidence) -> TaskQualityEvidence:
+    return TaskQualityEvidence(
+        model_id=evidence.model_id,
+        task=evidence.task or "general",
+        quality_score=evidence.score,
+        sample_size=evidence.sample_count,
+        source=evidence.source,
+        evaluator_type=evidence.evaluator,
+        dataset=evidence.metadata.get("dataset"),
+        evaluated_at=evidence.observed_at,
+    )
 
 
 def _apply_payload_policy(row: Observation, policy: PayloadPolicy) -> Observation:

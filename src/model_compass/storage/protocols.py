@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import builtins
 from datetime import datetime, timedelta
 from typing import Protocol
 
 from model_compass.domain import BenchmarkResult, BenchmarkRun, Observation, QualityEvidence
 from model_compass.metrics.observations import ObservationSummary
+from model_compass.metrics.task_observations import (
+    Observation as TaskObservation,
+)
+from model_compass.metrics.task_observations import (
+    QualityEvidence as TaskQualityEvidence,
+)
 
 
 class ObservationStore(Protocol):
@@ -17,8 +24,14 @@ class ObservationStore(Protocol):
     ) -> Observation: ...  # pragma: no branch
 
     def record_observations(
-        self, observations: list[Observation], *, deduplicate: bool = False
+        self, observations: builtins.list[Observation], *, deduplicate: bool = False
     ) -> int: ...  # pragma: no branch
+
+    def record(self, observation: TaskObservation) -> None: ...  # pragma: no branch
+
+    def list(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> builtins.list[TaskObservation]: ...  # pragma: no branch
 
     def query_observations(
         self,
@@ -30,7 +43,7 @@ class ObservationStore(Protocol):
         recent: timedelta | None = None,
         now_utc: datetime | None = None,
         limit: int | None = None,
-    ) -> list[Observation]: ...  # pragma: no branch
+    ) -> builtins.list[Observation]: ...  # pragma: no branch
 
     def summarize_model(
         self,
@@ -58,7 +71,7 @@ class ObservationStore(Protocol):
 
     def record_benchmark_run(self, run: BenchmarkRun) -> BenchmarkRun: ...  # pragma: no branch
 
-    def query_benchmark_runs(self) -> list[BenchmarkRun]: ...  # pragma: no branch
+    def query_benchmark_runs(self) -> builtins.list[BenchmarkRun]: ...  # pragma: no branch
 
     def record_benchmark_result(
         self, result: BenchmarkResult
@@ -66,15 +79,19 @@ class ObservationStore(Protocol):
 
     def query_benchmark_results(
         self, *, run_id: str | None = None
-    ) -> list[BenchmarkResult]: ...  # pragma: no branch
+    ) -> builtins.list[BenchmarkResult]: ...  # pragma: no branch
 
     def record_quality_evidence(
-        self, evidence: QualityEvidence
-    ) -> QualityEvidence: ...  # pragma: no branch
+        self, evidence: QualityEvidence | TaskQualityEvidence
+    ) -> QualityEvidence | TaskQualityEvidence: ...  # pragma: no branch
 
     def query_quality_evidence(
         self, *, model_id: str | None = None, task: str | None = None
-    ) -> list[QualityEvidence]: ...  # pragma: no branch
+    ) -> builtins.list[QualityEvidence]: ...  # pragma: no branch
+
+    def list_quality_evidence(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> builtins.list[TaskQualityEvidence]: ...  # pragma: no branch
 
     def delete_before(self, timestamp: datetime) -> int: ...  # pragma: no branch
 

@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from model_compass.exceptions import PricingError
+
 KNOWN_OPENROUTER_PRICE_KEYS: tuple[str, ...] = (
     "prompt",
     "completion",
@@ -101,6 +103,8 @@ class PriceComponent(BaseModel):
     @field_validator("amount")
     @classmethod
     def _non_negative(cls, value: Decimal) -> Decimal:
+        if not value.is_finite():
+            raise ValueError("price must be a finite number")
         if value < Decimal("0"):
             raise ValueError("price must be non-negative")
         return value
@@ -227,14 +231,16 @@ def parse_decimal(value: object) -> Decimal:
     """Parse money values into Decimal using string-safe conversion."""
     if isinstance(value, Decimal):
         return value
+    if isinstance(value, bool):
+        raise PricingError(f"unsupported decimal input type: {type(value)!r}")
     if isinstance(value, int):
         return Decimal(value)
     if isinstance(value, str):
         try:
             return Decimal(value)
         except InvalidOperation as exc:  # pragma: no cover - exercised via tests
-            raise ValueError(f"invalid decimal string: {value}") from exc
+            raise PricingError(f"invalid decimal string: {value}") from exc
     if isinstance(value, float):
         return Decimal(str(value))
 
-    raise ValueError(f"unsupported decimal input type: {type(value)!r}")
+    raise PricingError(f"unsupported decimal input type: {type(value)!r}")
