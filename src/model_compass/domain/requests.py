@@ -37,17 +37,14 @@ class RequestProfile(BaseModel):
     @classmethod
     def _normalize_modalities(cls, value: object) -> frozenset[str]:
         if isinstance(value, str):
-            values = (value,)
-        elif isinstance(value, Sequence) or isinstance(value, (set, frozenset)):
-            values = value
+            values: list[object] = [value]
+        elif isinstance(value, (Sequence, set, frozenset)):
+            values = list(value)
         else:
             raise TypeError("modalities must be a sequence of strings")
-        normalized = frozenset(
-            item.strip().lower() for item in values if isinstance(item, str) and item.strip()
-        )
-        if len(normalized) != len(values):
+        if any(not isinstance(item, str) or not item.strip() for item in values):
             raise ValueError("modalities must contain non-empty strings only")
-        return normalized
+        return frozenset(item.strip().lower() for item in values if isinstance(item, str))
 
     @field_validator("max_cost_usd", "min_quality", "min_reliability", mode="before")
     @classmethod
@@ -67,12 +64,13 @@ class RequestProfile(BaseModel):
         """Build a profile, preferring every explicitly supplied requirement."""
         inferred: dict[str, object] = {}
         has_text, has_image = _infer_input_modalities(prompt, messages)
+        inferred_modalities: set[str] = set()
         if has_text:
-            inferred["input_modalities"] = frozenset({"text"})
+            inferred_modalities.add("text")
         if has_image:
-            inferred["input_modalities"] = frozenset(
-                set(inferred.get("input_modalities", frozenset())) | {"image"}
-            )
+            inferred_modalities.add("image")
+        if inferred_modalities:
+            inferred["input_modalities"] = frozenset(inferred_modalities)
         if tools:
             inferred["requires_tools"] = True
         if response_schema is not None:
@@ -87,6 +85,24 @@ class RequestProfile(BaseModel):
             )
             reserve = expected_output if isinstance(expected_output, int) else 0
             inferred["minimum_context"] = input_size + reserve
+            context_assumptions = [
+                "Context input size uses explicit_input_tokens."
+                if isinstance(explicit_input, int)
+                else "Context input size is approximated as one token per four request characters."
+            ]
+            context_assumptions.append(
+                "expected_output_tokens is reserved."
+                if isinstance(expected_output, int)
+                else "No output-token reserve was added because expected_output_tokens was omitted."
+            )
+            caller_metadata = requirements.get("metadata", {})
+            if isinstance(caller_metadata, Mapping):
+                inferred["metadata"] = {
+                    **caller_metadata,
+                    "inference_assumptions": tuple(context_assumptions),
+                }
+            else:
+                inferred["metadata"] = {"inference_assumptions": tuple(context_assumptions)}
 
         values = {**inferred, **requirements}
         return cls(**values)

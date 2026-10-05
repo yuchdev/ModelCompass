@@ -54,23 +54,23 @@ class FallbackTokenEstimator:
             input_tokens = explicit_input_tokens
             source = "explicit"
             exact = True
-            notes = ("Input token count supplied explicitly; it was not retokenized.",)
+            notes = ["Input token count supplied explicitly; it was not retokenized."]
         else:
             input_tokens = (_character_count(prompt, messages) + 3) // 4
             source = "fallback_chars_per_token"
             exact = False
-            notes = ("Approximation: input tokens estimated as one token per four characters.",)
+            notes = ["Approximation: input tokens estimated as one token per four characters."]
         output_tokens = expected_output_tokens or 0
         if expected_output_tokens is not None:
-            notes += ("Output token count is the expected scenario value.",)
+            notes.append("Output token count is the expected scenario value.")
         else:
-            notes += ("Output token usage was not supplied and is assumed to be zero.",)
+            notes.append("Output token usage was not supplied and is assumed to be zero.")
         return TokenEstimate(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             source=source,
             exact=exact,
-            notes=notes,
+            notes=tuple(notes),
         )
 
 
@@ -132,18 +132,18 @@ class LiteLLMTokenEstimator:
                     )
                 }
             )
-        notes = ("Input count tokenized by LiteLLM for the requested model.",)
+        notes = ["Input count tokenized by LiteLLM for the requested model."]
         output_tokens = expected_output_tokens or 0
         if expected_output_tokens is not None:
-            notes += ("Output token count is the expected scenario value.",)
+            notes.append("Output token count is the expected scenario value.")
         else:
-            notes += ("Output token usage was not supplied and is assumed to be zero.",)
+            notes.append("Output token usage was not supplied and is assumed to be zero.")
         return TokenEstimate(
             input_tokens=count,
             output_tokens=output_tokens,
             source="litellm",
             exact=True,
-            notes=notes,
+            notes=tuple(notes),
         )
 
 

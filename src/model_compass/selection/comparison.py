@@ -89,14 +89,15 @@ def compare_models(
             eligible = eligibility.eligible
             if not cost.complete:
                 unknown.append("cost_estimate")
-                if missing_data_policy == MissingDataPolicy.REJECT:
-                    reasons.append("cost ceiling cannot be verified because pricing is incomplete")
-                    eligible = False
-            elif cost.total > request.max_cost_usd:
+            if cost.total > request.max_cost_usd:
                 reasons.append(
                     f"estimated cost {cost.total} USD exceeds maximum {request.max_cost_usd} USD"
                 )
                 eligible = False
+            elif not cost.complete:
+                if missing_data_policy == MissingDataPolicy.REJECT:
+                    reasons.append("cost ceiling cannot be verified because pricing is incomplete")
+                    eligible = False
             eligibility = EligibilityResult(
                 eligible=eligible,
                 reasons=tuple(reasons),

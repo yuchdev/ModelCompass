@@ -21,7 +21,7 @@ Model Compass provides:
 
 ## Status
 
-🚧 **Alpha — bootstrap skeleton only.** Core analytics functionality is not yet implemented.
+🚧 **Alpha.** Catalog ingestion, request profiling, capability matching, token/cost estimates, and model comparisons are available; quality/latency ranking is not yet implemented.
 
 ## Install from source
 
