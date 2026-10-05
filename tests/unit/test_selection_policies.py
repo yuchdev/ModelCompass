@@ -20,6 +20,7 @@ from model_compass.domain import (
 from model_compass.exceptions import NoEligibleModelError
 from model_compass.metrics import Observation, QualityEvidence, summarize_observations
 from model_compass.selection import (
+    BenchmarkQualityProvider,
     CandidateAssessment,
     GatewayProviderAllowBlock,
     InMemoryQualityProvider,
@@ -209,6 +210,139 @@ def test_constraints_precede_ranking_and_empty_error_has_reason_counts() -> None
     with pytest.raises(NoEligibleModelError) as no_candidate_error:
         select_model([], RequestProfile(), raise_on_empty=True)
     assert no_candidate_error.value.reason_counts == {}
+
+
+@pytest.mark.unit
+def test_rankability_is_not_reported_for_candidates_rejected_by_constraints() -> None:
+    unpriced = _profile("unpriced").model_copy(update={"pricing": Pricing()})
+    result = select_model(
+        [unpriced],
+        RequestProfile(explicit_input_tokens=1, expected_output_tokens=1),
+        policy=SelectionPolicy.CHEAPEST,
+        blocked_model_ids=("test:unpriced",),
+    )
+
+    assert result.rejection_counts == {"model_id_allow_block": 1}
+    assert {item.reason_code for item in result.assessments[0].constraint_results} == {
+        "capability_requirements",
+        "model_id_allow_block",
+    }
+
+
+@pytest.mark.unit
+def test_unknown_request_capabilities_are_not_duplicated_as_strict_constraints() -> None:
+    profile = _profile("unknown").model_copy(update={"capabilities": ModelCapabilities()})
+    request = RequestProfile(
+        task="task",
+        explicit_input_tokens=1,
+        expected_output_tokens=1,
+        requires_tools=True,
+        minimum_context=100,
+    )
+    result = select_model(
+        [profile],
+        request,
+        missing_data=SelectionDataPolicy(allow_unknown_capabilities=True),
+    )
+
+    assert result.selected is not None
+    assert [item.reason_code for item in result.assessments[0].constraint_results] == [
+        "capability_requirements"
+    ]
+    explicit = select_model(
+        [profile],
+        RequestProfile(),
+        required_capabilities=("tools",),
+        minimum_context=200_000,
+    )
+    assert {
+        item.reason_code for item in explicit.assessments[0].constraint_results if not item.passed
+    } == {"required_capabilities", "minimum_context"}
+
+
+@pytest.mark.unit
+def test_task_observation_and_quality_timestamps_are_aware_and_normalized() -> None:
+    offset = datetime.fromisoformat("2026-01-01T02:00:00+02:00")
+    observation = Observation(
+        model_id="test:timestamp",
+        task="task",
+        timestamp=offset,
+        succeeded=True,
+        latency_ms=1,
+        quality_score=Decimal("0.8"),
+    )
+    later_observation = Observation(
+        model_id="test:timestamp",
+        task="task",
+        timestamp=datetime.fromisoformat("2026-01-01T03:00:00+02:00"),
+        succeeded=True,
+        latency_ms=1,
+        quality_score=Decimal("0.9"),
+    )
+    evidence = QualityEvidence(
+        model_id="test:timestamp",
+        task="task",
+        quality_score=Decimal("0.9"),
+        sample_size=2,
+        source="test",
+        evaluator_type="exact",
+        evaluated_at=offset,
+    )
+
+    assert observation.timestamp == datetime(2026, 1, 1, tzinfo=UTC)
+    assert evidence.evaluated_at == datetime(2026, 1, 1, tzinfo=UTC)
+    summary = summarize_observations("test:timestamp", "task", [observation, later_observation])
+    assert summary is not None
+    assert summary.observed_at == datetime(2026, 1, 1, 1, tzinfo=UTC)
+    assert summary.quality_observed_at == datetime(2026, 1, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="timezone"):
+        Observation(
+            model_id="test:timestamp",
+            task="task",
+            timestamp=datetime.fromisoformat("2026-01-01T00:00:00"),
+            succeeded=True,
+            latency_ms=1,
+        )
+    with pytest.raises(ValueError, match="timezone"):
+        QualityEvidence(
+            model_id="test:timestamp",
+            task="task",
+            quality_score=Decimal("0.9"),
+            sample_size=1,
+            source="test",
+            evaluator_type="exact",
+            evaluated_at=datetime.fromisoformat("2026-01-01T00:00:00"),
+        )
+
+
+@pytest.mark.unit
+def test_quality_evidence_aggregation_handles_timestamp_offsets() -> None:
+    provider = BenchmarkQualityProvider(
+        [
+            QualityEvidence(
+                model_id="test:quality",
+                task="task",
+                quality_score=Decimal("0.8"),
+                sample_size=1,
+                source="test",
+                evaluator_type="exact",
+                evaluated_at=datetime.fromisoformat("2026-01-01T01:00:00+01:00"),
+            ),
+            QualityEvidence(
+                model_id="test:quality",
+                task="task",
+                quality_score=Decimal("1"),
+                sample_size=1,
+                source="test",
+                evaluator_type="exact",
+                evaluated_at=datetime.fromisoformat("2026-01-01T03:00:00+02:00"),
+            ),
+        ]
+    )
+
+    result = provider.get_quality_evidence("test:quality", "task")
+    assert result is not None
+    assert result.observed_at == datetime(2026, 1, 1, 1, tzinfo=UTC)
 
 
 @pytest.mark.unit

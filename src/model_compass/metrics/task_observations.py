@@ -35,6 +35,13 @@ class Observation(BaseModel):
             raise ValueError("model_id and task must not be empty")
         return value
 
+    @field_validator("timestamp")
+    @classmethod
+    def _normalize_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamps must include a timezone")
+        return value.astimezone(UTC)
+
     @field_validator("actual_cost_usd", "quality_score", mode="before")
     @classmethod
     def _decimal_values(cls, value: object) -> Decimal | None:
@@ -72,6 +79,13 @@ class QualityEvidence(BaseModel):
     evaluator_type: str
     dataset: str | None = None
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("evaluated_at")
+    @classmethod
+    def _normalize_evaluated_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamps must include a timezone")
+        return value.astimezone(UTC)
 
     @field_validator("quality_score", mode="before")
     @classmethod

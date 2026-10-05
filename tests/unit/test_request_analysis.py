@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -20,13 +21,34 @@ from model_compass.domain import (
     build_request_profile,
 )
 from model_compass.metrics import FallbackTokenEstimator, TokenEstimate, estimate_cost
+from model_compass.metrics.tokens import Message
 from model_compass.selection import (
     MissingDataPolicy,
+    SelectionPolicy,
     check_eligibility,
     compare_models,
     custom_workload_scenario,
     workload_scenario,
 )
+
+
+class _ModelSpecificEstimator:
+    def estimate(
+        self,
+        *,
+        model: str,
+        prompt: str | None = None,
+        messages: Sequence[Message] | None = None,
+        explicit_input_tokens: int | None = None,
+        expected_output_tokens: int | None = None,
+    ) -> TokenEstimate:
+        del prompt, messages, explicit_input_tokens, expected_output_tokens
+        return TokenEstimate(
+            input_tokens=100 if model == "large-tokenizer" else 1,
+            output_tokens=0,
+            source="test",
+            exact=True,
+        )
 
 
 def _model(
@@ -192,6 +214,73 @@ def test_explicit_and_approximate_token_estimates_are_disclosed() -> None:
     assert explicit.input_tokens == 88
     assert explicit.source == "explicit"
     assert explicit.exact is True
+
+
+@pytest.mark.unit
+def test_comparison_ranks_using_its_per_model_prompt_cost_estimates() -> None:
+    pricing = Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal("0.01"))})
+    large = _model(pricing=pricing).model_copy(
+        update={
+            "identity": ModelIdentity(
+                provider="test",
+                model_id="large-tokenizer",
+                canonical_id="test:large-tokenizer",
+            )
+        }
+    )
+    small = _model(pricing=pricing).model_copy(
+        update={
+            "identity": ModelIdentity(
+                provider="test",
+                model_id="small-tokenizer",
+                canonical_id="test:small-tokenizer",
+            )
+        }
+    )
+
+    report = compare_models(
+        [large, small],
+        RequestProfile(),
+        _ModelSpecificEstimator(),
+        prompt="count this request",
+        policies=(SelectionPolicy.CHEAPEST,),
+        selected_policy=SelectionPolicy.CHEAPEST,
+    )
+
+    by_id = {item.model.identity.canonical_id: item for item in report.candidates}
+    assert by_id["test:large-tokenizer"].cost.total == Decimal("1.00")
+    assert by_id["test:small-tokenizer"].cost.total == Decimal("0.01")
+    assert by_id["test:small-tokenizer"].rank_by_policy == {"cheapest": 1}
+    assert by_id["test:large-tokenizer"].rank_by_policy == {"cheapest": 2}
+
+
+@pytest.mark.unit
+def test_comparison_propagates_allow_unknown_policy_to_all_selection_constraints() -> None:
+    model = _model()
+    request = RequestProfile(
+        explicit_input_tokens=1,
+        expected_output_tokens=1,
+        requires_tools=True,
+        minimum_context=100,
+        min_quality=Decimal("0.8"),
+        max_latency_ms=10,
+        min_reliability=Decimal("0.9"),
+        max_cost_usd=Decimal("1"),
+    )
+
+    report = compare_models(
+        [model],
+        request,
+        FallbackTokenEstimator(),
+        missing_data_policy=MissingDataPolicy.ALLOW,
+        policies=(SelectionPolicy.BEST,),
+        selected_policy=SelectionPolicy.BEST,
+    )
+    candidate = report.candidates[0]
+
+    assert candidate.eligibility.eligible is True
+    assert candidate.selection_eligible is True
+    assert candidate.rank_by_policy == {"best": 1}
 
 
 @pytest.mark.unit

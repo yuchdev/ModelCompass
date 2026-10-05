@@ -268,7 +268,6 @@ def request_constraints(
     cost = max_cost if max_cost is not None else request.max_cost_usd
     latency = max_latency_ms if max_latency_ms is not None else request.max_latency_ms
     reliability = min_reliability if min_reliability is not None else request.min_reliability
-    context = minimum_context if minimum_context is not None else request.minimum_context
     constraints: list[SelectionConstraint] = []
     if quality is not None:
         constraints.append(MinimumQuality(quality))
@@ -278,19 +277,10 @@ def request_constraints(
         constraints.append(MaximumLatency(Decimal(latency)))
     if reliability is not None:
         constraints.append(MinimumReliability(reliability))
-    capabilities = list(required_capabilities)
-    if request.requires_tools:
-        capabilities.append("tools")
-    if request.requires_structured_output:
-        capabilities.append("structured_output")
-    if request.requires_reasoning:
-        capabilities.append("reasoning")
-    if request.requires_streaming:
-        capabilities.append("streaming")
-    if capabilities:
-        constraints.append(RequiredCapabilities(tuple(dict.fromkeys(capabilities))))
-    if context is not None:
-        constraints.append(MinimumContext(context))
+    if required_capabilities:
+        constraints.append(RequiredCapabilities(tuple(dict.fromkeys(required_capabilities))))
+    if minimum_context is not None:
+        constraints.append(MinimumContext(minimum_context))
     if allowed_model_ids or blocked_model_ids:
         constraints.append(ModelIdAllowBlock(allowed=allowed_model_ids, blocked=blocked_model_ids))
     if any((allowed_gateways, blocked_gateways, allowed_providers, blocked_providers)):

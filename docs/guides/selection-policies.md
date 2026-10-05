@@ -27,6 +27,19 @@ Hard constraints run before ranking. A rejected model remains in
 reason codes. If no candidate survives, inspect `result.rejection_counts`; pass
 `raise_on_empty=True` to receive a structured `NoEligibleModelError`.
 
+`compare_models` applies its `missing_data_policy` to both its capability
+eligibility report and every policy ranking. With `MissingDataPolicy.ALLOW`,
+unknown capability and threshold evidence does not become a second strict
+selection constraint; candidates can still remain unrankable when the policy's
+primary objective itself requires unavailable data. Missing values fail a hard
+numeric constraint by default; `ALLOW` permits unknown evidence, but a known
+partial cost above a maximum cost limit is still rejected.
+
+Comparison ranks use the same per-model token and cost estimates shown on each
+candidate. This matters when a prompt or messages are tokenized differently for
+different models: cost-based policy ranks reflect those model-specific estimates,
+and a cost-based rank is available whenever the displayed estimate is complete.
+
 ## Policy ordering
 
 All final ties use canonical model ID for deterministic output.

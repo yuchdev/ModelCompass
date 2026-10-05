@@ -21,8 +21,10 @@ from model_compass.metrics.task_observations import (
 )
 from model_compass.selection.constraints import (
     ConstraintResult,
+    MaximumExpectedCost,
     MaximumLatency,
     MinimumQuality,
+    MinimumReliability,
     SelectionConstraint,
     request_constraints,
 )
@@ -41,6 +43,8 @@ class SelectionDataPolicy(BaseModel):
     allow_unknown_capabilities: bool = False
     reject_missing_quality: bool = True
     reject_missing_latency: bool = True
+    reject_missing_cost: bool = True
+    reject_missing_reliability: bool = True
     min_reliability_samples: int = Field(default=5, ge=1)
     min_latency_samples: int = Field(default=5, ge=1)
     allow_incomplete_cost_efficiency: bool = False
@@ -82,12 +86,13 @@ class ObjectiveDirection(StrEnum):
 
 
 class RequestCostEstimate(BaseModel):
-    """Request cost estimate and explicit missing-price assumptions."""
+    """Request cost estimate, known subtotal, and missing-price assumptions."""
 
     model_config = ConfigDict(frozen=True)
 
     model_id: str
     amount_usd: Decimal | None
+    known_amount_usd: Decimal | None = None
     missing_components: tuple[str, ...] = ()
 
 
@@ -222,6 +227,7 @@ def estimate_request_cost(
     return RequestCostEstimate(
         model_id=profile.identity.canonical_id,
         amount_usd=None if missing else amount,
+        known_amount_usd=amount,
         missing_components=tuple(missing),
     )
 
@@ -236,6 +242,7 @@ def select_model(
     quality_evidence: Sequence[QualityEvidence] = (),
     quality_provider: QualityProvider | None = None,
     missing_data: SelectionDataPolicy | None = None,
+    request_cost_estimates: Mapping[str, RequestCostEstimate] | None = None,
     constraints: Sequence[SelectionConstraint] = (),
     min_quality: Decimal | None = None,
     max_cost: Decimal | None = None,
@@ -293,6 +300,7 @@ def select_model(
             provider,
             data_policy,
             built_constraints,
+            request_cost_estimates=request_cost_estimates,
             now_utc=now_utc,
         )
         for profile in profiles
@@ -327,7 +335,9 @@ def select_model(
     }
     final_assessments_list = []
     for item in assessments:
-        rankability_result = _rankability_result(item, policy, data_policy)
+        rankability_result = (
+            _rankability_result(item, policy, data_policy) if item.eligible else None
+        )
         final_assessments_list.append(
             item.model_copy(
                 update={
@@ -346,7 +356,7 @@ def select_model(
                         if item.eligible
                         else False
                     ),
-                    "rankable": rankability_result is None,
+                    "rankable": item.eligible and rankability_result is None,
                     "reasons": (
                         (*item.reasons, rankability_result.message)
                         if rankability_result is not None
@@ -496,6 +506,7 @@ def _assess(
     data_policy: SelectionDataPolicy,
     constraints: Sequence[SelectionConstraint],
     *,
+    request_cost_estimates: Mapping[str, RequestCostEstimate] | None = None,
     now_utc: datetime | None = None,
 ) -> CandidateAssessment:
     identity = profile.identity.canonical_id
@@ -539,7 +550,11 @@ def _assess(
             f"{request.expected_output_tokens}"
         )
 
-    cost = estimate_request_cost(profile, request, now_utc=now_utc)
+    cost = (
+        request_cost_estimates[identity]
+        if request_cost_estimates is not None and identity in request_cost_estimates
+        else estimate_request_cost(profile, request, now_utc=now_utc)
+    )
     quality_evidence = quality_provider.get_quality_evidence(identity, task)
     if quality_evidence is not None and quality_evidence.task not in (None, task):
         quality_evidence = None
@@ -650,6 +665,18 @@ def _assess(
                 }
             )
         elif (
+            isinstance(constraint, MaximumExpectedCost)
+            and assessment.expected_cost_usd is None
+            and not data_policy.reject_missing_cost
+            and (cost.known_amount_usd is None or cost.known_amount_usd <= constraint.value)
+        ):
+            result = result.model_copy(
+                update={
+                    "passed": True,
+                    "message": "expected cost is missing and allowed by the data policy",
+                }
+            )
+        elif (
             isinstance(constraint, MaximumLatency)
             and assessment.latency_evidence is None
             and not data_policy.reject_missing_latency
@@ -658,6 +685,17 @@ def _assess(
                 update={
                     "passed": True,
                     "message": "latency evidence is missing and allowed by the data policy",
+                }
+            )
+        elif (
+            isinstance(constraint, MinimumReliability)
+            and assessment.reliability_evidence is None
+            and not data_policy.reject_missing_reliability
+        ):
+            result = result.model_copy(
+                update={
+                    "passed": True,
+                    "message": "reliability evidence is missing and allowed by the data policy",
                 }
             )
         evaluated_constraints.append(result)
