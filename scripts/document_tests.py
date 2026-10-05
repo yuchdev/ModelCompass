@@ -44,7 +44,7 @@ import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 TestFunc = Union[ast.FunctionDef, ast.AsyncFunctionDef]
 
@@ -82,8 +82,8 @@ class TestCase:
     classification: str
     ambiguous: bool
     insert_line: int  # 1-indexed line to insert before (post any deletion)
-    delete_start: Optional[int]  # 1-indexed inclusive start of existing generated docstring
-    delete_end: Optional[int]  # 1-indexed inclusive end of existing generated docstring
+    delete_start: int | None  # 1-indexed inclusive start of existing generated docstring
+    delete_end: int | None  # 1-indexed inclusive end of existing generated docstring
     skip_custom_docstring: bool
     indent: str
     rendered: str = field(default="")
@@ -106,7 +106,7 @@ def _humanize_filename(file_path: Path) -> str:
     return _humanize(stem)
 
 
-def _context_label(file_path: Path, class_name: Optional[str]) -> str:
+def _context_label(file_path: Path, class_name: str | None) -> str:
     if class_name:
         return _humanize_class(class_name)
     return _humanize_filename(file_path)
@@ -163,7 +163,7 @@ def _classify(file_path: Path, body_text: str) -> tuple[str, bool]:
     return "Unit", True
 
 
-def _existing_docstring_range(node: TestFunc) -> tuple[Optional[int], Optional[int], Optional[str]]:
+def _existing_docstring_range(node: TestFunc) -> tuple[int | None, int | None, str | None]:
     if not node.body:
         return None, None, None
     first = node.body[0]
@@ -202,7 +202,7 @@ def _render_docstring(indent: str, classification: str, context_label: str, test
 def _collect_file(file_path: Path, tree: ast.Module, source_lines: list[str]) -> list[TestCase]:
     cases: list[TestCase] = []
 
-    def visit_function(node: ast.AST, class_name: Optional[str]) -> None:
+    def visit_function(node: ast.AST, class_name: str | None) -> None:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return
         if not node.name.startswith("test_"):

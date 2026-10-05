@@ -34,7 +34,6 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -102,7 +101,7 @@ def heading_anchors(path: Path) -> set[str]:
     anchors: set[str] = set()
     seen: dict[str, int] = {}
     in_fence = False
-    fence_marker: Optional[str] = None
+    fence_marker: str | None = None
 
     for line in path.read_text(encoding="utf-8").splitlines():
         fence = _FENCE_RE.match(line)
@@ -154,7 +153,7 @@ def check_file(path: Path) -> list[str]:
     """Return a list of ``file:line: ...`` problems for one Markdown file."""
     problems: list[str] = []
     in_fence = False
-    fence_marker: Optional[str] = None
+    fence_marker: str | None = None
     anchor_cache: dict[Path, set[str]] = {}
 
     for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -212,7 +211,7 @@ def iter_markdown(paths: list[Path]) -> list[Path]:
     return sorted(found)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate Markdown links and anchors.")
     parser.add_argument(
         "paths",
