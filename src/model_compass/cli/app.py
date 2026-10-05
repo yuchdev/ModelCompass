@@ -26,7 +26,7 @@ from model_compass.execution import CompletionRequest
 from model_compass.selection import (
     ParetoObjective,
     SelectionPolicy,
-    estimate_cost,
+    estimate_request_cost,
     pareto_frontier,
 )
 
@@ -168,9 +168,9 @@ def estimate(
         if profile is None:
             raise ValueError(f"model {model_id!r} was not found in the catalog")
         request = RequestProfile(
-            estimated_input_tokens=input_tokens, expected_output_tokens=output_tokens
+            explicit_input_tokens=input_tokens, expected_output_tokens=output_tokens
         )
-        result = estimate_cost(profile, request)
+        result = estimate_request_cost(profile, request)
     except (ModelCompassError, ValueError) as exc:
         err_console.print(f"Unable to estimate cost: {exc}")
         raise typer.Exit(code=1) from exc
@@ -190,17 +190,6 @@ def estimate(
         ", ".join(result.missing_components),
     )
     console.print(table)
-
-
-def _modality_kwargs(
-    input_modalities: list[str] | None, output_modalities: list[str] | None
-) -> dict[str, frozenset[str]]:
-    kwargs: dict[str, frozenset[str]] = {}
-    if input_modalities:
-        kwargs["input_modalities"] = frozenset(input_modalities)
-    if output_modalities:
-        kwargs["output_modalities"] = frozenset(output_modalities)
-    return kwargs
 
 
 @app.command()
@@ -246,9 +235,10 @@ def select(
     try:
         request = RequestProfile(
             task=task,
-            estimated_input_tokens=input_tokens,
+            explicit_input_tokens=input_tokens,
             expected_output_tokens=output_tokens,
-            **_modality_kwargs(input_modalities, output_modalities),
+            input_modalities=frozenset(input_modalities or ()),
+            output_modalities=frozenset(output_modalities or ()),
             minimum_context=minimum_context,
             max_cost_usd=_parse_decimal_option(max_cost, "--max-cost"),
             min_quality=_parse_decimal_option(min_quality, "--min-quality"),
@@ -313,7 +303,7 @@ def pareto(
         snapshot = analytics.catalog.refresh(offline=offline, include_litellm=False)
         request = RequestProfile(
             task=task,
-            estimated_input_tokens=input_tokens,
+            explicit_input_tokens=input_tokens,
             expected_output_tokens=output_tokens,
         )
         result = analytics.select(

@@ -8,7 +8,7 @@ from typing import Any
 from model_compass.benchmarks import BenchmarkReport
 from model_compass.catalogs import CatalogService
 from model_compass.config import default_paths
-from model_compass.domain import MissingDataPolicy, ModelProfile, RequestProfile
+from model_compass.domain import ModelProfile, RequestProfile
 from model_compass.execution import (
     CompletionRequest,
     ExecutionBackend,
@@ -18,10 +18,11 @@ from model_compass.execution import (
 )
 from model_compass.metrics import Observation
 from model_compass.selection import (
-    CostEstimate,
+    RequestCostEstimate,
+    SelectionDataPolicy,
     SelectionPolicy,
     SelectionResult,
-    estimate_cost,
+    estimate_request_cost,
     select_model,
 )
 from model_compass.storage import ObservationStore
@@ -34,9 +35,9 @@ class AnalyticsFacade:
     catalog: CatalogService = field(default_factory=CatalogService)
     observation_store: ObservationStore | None = None
 
-    def estimate_cost(self, profile: ModelProfile, request: RequestProfile) -> CostEstimate:
+    def estimate_cost(self, profile: ModelProfile, request: RequestProfile) -> RequestCostEstimate:
         """Estimate the Decimal cost for a request and model profile."""
-        return estimate_cost(profile, request)
+        return estimate_request_cost(profile, request)
 
     def select(
         self,
@@ -44,15 +45,16 @@ class AnalyticsFacade:
         request: RequestProfile,
         *,
         policy: SelectionPolicy = SelectionPolicy.BEST,
-        missing_data: MissingDataPolicy | None = None,
+        missing_data: SelectionDataPolicy | None = None,
     ) -> SelectionResult:
         """Select a model using task-matched local observations."""
+        task = request.task or "general"
         return select_model(
             profiles,
             request,
             policy=policy,
-            observations=self._observations().list(task=request.task),
-            quality_evidence=self._observations().list_quality_evidence(task=request.task),
+            observations=self._observations().list(task=task),
+            quality_evidence=self._observations().list_quality_evidence(task=task),
             missing_data=missing_data,
         )
 

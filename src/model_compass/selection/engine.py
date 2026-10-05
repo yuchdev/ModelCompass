@@ -8,8 +8,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from model_compass.domain import ModelProfile, SupportStatus
-from model_compass.domain.requests import MissingDataPolicy, RequestProfile
+from model_compass.domain import ModelProfile, RequestProfile, SupportStatus
 from model_compass.exceptions import SelectionError
 from model_compass.metrics.observations import (
     MetricSummary,
@@ -18,6 +17,16 @@ from model_compass.metrics.observations import (
     summarize_observations,
     summarize_quality_evidence,
 )
+
+
+class SelectionDataPolicy(BaseModel):
+    """Explicitly control how unknown capability and evidence data is treated."""
+
+    model_config = ConfigDict(frozen=True)
+
+    allow_unknown_capabilities: bool = False
+    reject_missing_quality: bool = True
+    reject_missing_latency: bool = True
 
 
 class SelectionPolicy(StrEnum):
@@ -39,7 +48,7 @@ class ParetoObjective(StrEnum):
     LATENCY = "latency"
 
 
-class CostEstimate(BaseModel):
+class RequestCostEstimate(BaseModel):
     """Request cost estimate and explicit missing-price assumptions."""
 
     model_config = ConfigDict(frozen=True)
@@ -76,13 +85,13 @@ class SelectionResult(BaseModel):
     assessments: tuple[CandidateAssessment, ...]
 
 
-def estimate_cost(profile: ModelProfile, request: RequestProfile) -> CostEstimate:
+def estimate_request_cost(profile: ModelProfile, request: RequestProfile) -> RequestCostEstimate:
     """Estimate token cost using source per-token Decimal rates."""
-    prices = profile.pricing.effective_components(prompt_tokens=request.estimated_input_tokens or 0)
+    prices = profile.pricing.effective_components(prompt_tokens=request.explicit_input_tokens or 0)
     missing: list[str] = []
     amount = Decimal("0")
     for key, token_count in (
-        ("prompt", request.estimated_input_tokens),
+        ("prompt", request.explicit_input_tokens),
         ("completion", request.expected_output_tokens),
     ):
         if token_count is None:
@@ -98,7 +107,7 @@ def estimate_cost(profile: ModelProfile, request: RequestProfile) -> CostEstimat
     request_fee = prices.get("request")
     if request_fee is not None:
         amount += request_fee.amount
-    return CostEstimate(
+    return RequestCostEstimate(
         model_id=profile.identity.canonical_id,
         amount_usd=None if missing else amount,
         missing_components=tuple(missing),
@@ -112,13 +121,14 @@ def select_model(
     policy: SelectionPolicy = SelectionPolicy.BEST,
     observations: Sequence[Observation] = (),
     quality_evidence: Sequence[QualityEvidence] = (),
-    missing_data: MissingDataPolicy | None = None,
+    missing_data: SelectionDataPolicy | None = None,
 ) -> SelectionResult:
     """Filter hard requirements, then rank eligible models under one policy."""
-    missing_data = missing_data or MissingDataPolicy()
+    missing_data = missing_data or SelectionDataPolicy()
+    task = request.task or "general"
     summaries = {
         profile.identity.canonical_id: summarize_observations(
-            profile.identity.canonical_id, request.task, list(observations)
+            profile.identity.canonical_id, task, list(observations)
         )
         for profile in profiles
     }
@@ -190,9 +200,10 @@ def _assess(
     request: RequestProfile,
     summary: MetricSummary | None,
     quality_evidence: list[QualityEvidence],
-    policy: MissingDataPolicy,
+    policy: SelectionDataPolicy,
 ) -> CandidateAssessment:
     identity = profile.identity.canonical_id
+    task = request.task or "general"
     capabilities = profile.capabilities
     reasons: list[str] = []
     _require_modalities(
@@ -208,7 +219,7 @@ def _assess(
 
     required_context = request.minimum_context
     token_counts = (
-        request.estimated_input_tokens,
+        request.explicit_input_tokens,
         request.expected_output_tokens,
     )
     if any(count is not None for count in token_counts):
@@ -233,8 +244,8 @@ def _assess(
             f"{request.expected_output_tokens}"
         )
 
-    cost = estimate_cost(profile, request)
-    benchmark_quality = summarize_quality_evidence(identity, request.task, quality_evidence)
+    cost = estimate_request_cost(profile, request)
+    benchmark_quality = summarize_quality_evidence(identity, task, quality_evidence)
     quality = (
         benchmark_quality[0] if benchmark_quality else (summary.mean_quality if summary else None)
     )
@@ -250,7 +261,7 @@ def _assess(
     if request.min_quality is not None:
         if quality is None:
             if policy.reject_missing_quality:
-                reasons.append(f"no quality evidence for task {request.task!r}")
+                reasons.append(f"no quality evidence for task {task!r}")
         elif quality < request.min_quality:
             reasons.append(f"quality {quality} is below minimum {request.min_quality}")
     if request.max_latency_ms is not None:
@@ -261,7 +272,7 @@ def _assess(
             reasons.append(f"latency {latency}ms exceeds limit {request.max_latency_ms}ms")
 
     if summary is None:
-        reasons.append(f"no empirical observations for task {request.task!r}")
+        reasons.append(f"no empirical observations for task {task!r}")
     elif quality is None:
         reasons.append("quality evidence is missing")
     if cost.amount_usd is None:
@@ -288,7 +299,7 @@ def _assess(
                     {
                         f"{item.source}:{item.dataset or item.evaluator_type}"
                         for item in quality_evidence
-                        if item.model_id == identity and item.task == request.task
+                        if item.model_id == identity and item.task == task
                     }
                 )
             )
@@ -303,7 +314,7 @@ def _require_modalities(
     direction: str,
     required: frozenset[str],
     available: tuple[str, ...],
-    policy: MissingDataPolicy,
+    policy: SelectionDataPolicy,
 ) -> None:
     if not required:
         return
@@ -317,7 +328,7 @@ def _require_modalities(
 
 
 def _require_support(
-    reasons: list[str], capability: str, status: SupportStatus, policy: MissingDataPolicy
+    reasons: list[str], capability: str, status: SupportStatus, policy: SelectionDataPolicy
 ) -> None:
     if status == SupportStatus.UNSUPPORTED:
         reasons.append(f"{capability} is unsupported")

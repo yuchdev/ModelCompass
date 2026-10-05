@@ -19,7 +19,7 @@ from model_compass.selection import (
     CandidateAssessment,
     ParetoObjective,
     SelectionPolicy,
-    estimate_cost,
+    estimate_request_cost,
     pareto_frontier,
     select_model,
 )
@@ -54,18 +54,18 @@ def make_profile(
 @pytest.mark.unit
 def test_cost_estimation_uses_decimal_rates_and_missing_token_counts() -> None:
     profile = make_profile("cheap")
-    request = RequestProfile(estimated_input_tokens=100, expected_output_tokens=20)
+    request = RequestProfile(explicit_input_tokens=100, expected_output_tokens=20)
 
-    estimate = estimate_cost(profile, request)
+    estimate = estimate_request_cost(profile, request)
     assert estimate.amount_usd == Decimal("0.000140")
     assert estimate.missing_components == ()
 
-    unknown = estimate_cost(profile, RequestProfile(estimated_input_tokens=100))
+    unknown = estimate_request_cost(profile, RequestProfile(explicit_input_tokens=100))
     assert unknown.amount_usd is None
     assert unknown.missing_components == ("completion token count",)
 
     free = make_profile("free", prompt_price="0", completion_price="0")
-    assert estimate_cost(free, request).amount_usd == Decimal("0")
+    assert estimate_request_cost(free, request).amount_usd == Decimal("0")
 
 
 @pytest.mark.unit
@@ -73,7 +73,7 @@ def test_selection_enforces_capabilities_quality_and_cost() -> None:
     profile = make_profile("cheap")
     request = RequestProfile(
         task="code_review",
-        estimated_input_tokens=10,
+        explicit_input_tokens=10,
         expected_output_tokens=10,
         requires_tools=True,
         max_cost_usd=Decimal("0.0001"),
@@ -118,7 +118,7 @@ def test_unknown_capabilities_and_missing_cost_are_not_hard_match() -> None:
         update={"capabilities": ModelCapabilities()}
     )
     request = RequestProfile(
-        estimated_input_tokens=1,
+        explicit_input_tokens=1,
         expected_output_tokens=1,
         requires_tools=True,
         minimum_context=50,
@@ -147,7 +147,7 @@ def test_partial_token_estimates_still_require_known_context() -> None:
             )
         }
     )
-    request = RequestProfile(estimated_input_tokens=100)
+    request = RequestProfile(explicit_input_tokens=100)
     assert select_model([unknown_context], request).selected is None
     known = unknown_context.model_copy(
         update={
@@ -193,7 +193,7 @@ def test_policy_ranking_and_task_matched_summary() -> None:
     assert summary.sample_size == 1
     assert summarize_observations("test:cheap", "missing", observations) is None
 
-    req = RequestProfile(task="code", estimated_input_tokens=10, expected_output_tokens=10)
+    req = RequestProfile(task="code", explicit_input_tokens=10, expected_output_tokens=10)
     by_cost = select_model(
         [cheap, quality], req, policy=SelectionPolicy.CHEAPEST, observations=observations
     )
@@ -241,7 +241,7 @@ def test_zero_cost_is_handled_as_best_cost_efficiency() -> None:
     ]
     result = select_model(
         [paid, free],
-        RequestProfile(estimated_input_tokens=10, expected_output_tokens=10),
+        RequestProfile(explicit_input_tokens=10, expected_output_tokens=10),
         policy=SelectionPolicy.COST_EFFICIENT,
         observations=observations,
     )
@@ -253,7 +253,7 @@ def test_zero_cost_is_handled_as_best_cost_efficiency() -> None:
 def test_missing_quality_threshold_and_latency_threshold_reject_by_default() -> None:
     profile = make_profile("no-evidence")
     req = RequestProfile(
-        estimated_input_tokens=1,
+        explicit_input_tokens=1,
         expected_output_tokens=1,
         min_quality=Decimal("0.5"),
         max_latency_ms=100,
@@ -268,7 +268,7 @@ def test_benchmark_quality_evidence_is_weighted_and_task_scoped() -> None:
     profile = make_profile("tested")
     request = RequestProfile(
         task="code",
-        estimated_input_tokens=2,
+        explicit_input_tokens=2,
         expected_output_tokens=2,
         min_quality=Decimal("0.8"),
     )
@@ -347,8 +347,8 @@ def test_cost_estimate_includes_request_fee_once() -> None:
         }
     )
     profile = profile.model_copy(update={"pricing": pricing})
-    request = RequestProfile(estimated_input_tokens=100, expected_output_tokens=20)
-    assert estimate_cost(profile, request).amount_usd == Decimal("0.010140")
+    request = RequestProfile(explicit_input_tokens=100, expected_output_tokens=20)
+    assert estimate_request_cost(profile, request).amount_usd == Decimal("0.010140")
 
 
 @pytest.mark.unit
@@ -356,7 +356,7 @@ def test_selection_rejects_model_with_small_max_output_limit() -> None:
     profile = make_profile("capped")
     capabilities = profile.capabilities.model_copy(update={"max_output_tokens": 1})
     profile = profile.model_copy(update={"capabilities": capabilities})
-    request = RequestProfile(estimated_input_tokens=10, expected_output_tokens=500)
+    request = RequestProfile(explicit_input_tokens=10, expected_output_tokens=500)
     result = select_model([profile], request)
     assert result.selected is None
     assert any("max output tokens" in reason for reason in result.assessments[0].reasons)

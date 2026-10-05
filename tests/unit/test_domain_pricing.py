@@ -48,7 +48,7 @@ def test_request_normalizes_modalities_and_rejects_empty_values() -> None:
 
     request = RequestProfile(input_modalities=frozenset({" Text ", "IMAGE"}))
     assert request.input_modalities == frozenset({"text", "image"})
-    with pytest.raises(ValueError, match="modalities must not contain empty"):
+    with pytest.raises(ValueError, match="modalities must contain non-empty"):
         RequestProfile(input_modalities=frozenset({""}))
 
 
