@@ -26,6 +26,9 @@ nav:
       - Models and pricing: adr/lite-concepts-draft.md
       - Request profiles: concepts/request-profile.md
       - Cost estimation: concepts/cost-estimation.md
+      - Observations: concepts/observations.md
+  - Guides:
+      - Storage: guides/storage.md
   - Testing: qa/testing.md
 
 markdown_extensions:
