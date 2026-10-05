@@ -41,7 +41,6 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -193,7 +192,7 @@ def resolve_mention(
     source_rel: str,
     by_path: dict[str, str],
     by_name: dict[str, list[str]],
-) -> tuple[Optional[str], str]:
+) -> tuple[str | None, str]:
     """Resolve a bare mention to an absolute registry path, or explain failure.
 
     :param mention: the text as found in the source (e.g. ``"plan.md"`` or
@@ -342,7 +341,7 @@ def process_file(
     new_lines: list[str] = []
     all_unresolvable: list[dict[str, object]] = []
     in_fence = False
-    fence_marker: Optional[str] = None
+    fence_marker: str | None = None
     changed = False
 
     for lineno, raw in enumerate(lines, 1):
@@ -454,7 +453,7 @@ def iter_targets(paths: list[Path]) -> list[Path]:
     return sorted(found)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Entry point.
 
     :return: exit code (0 = all resolved, 1 = unresolvable items remain).

@@ -19,14 +19,13 @@ from __future__ import annotations
 
 import os
 import subprocess
-from typing import Optional
 
 from _common import REPO_ROOT, allow, append_log, block, read_event
 
 TIMEOUT_SECONDS = 900
 
 
-def _run(cmd: list[str]) -> Optional[subprocess.CompletedProcess[str]]:
+def _run(cmd: list[str]) -> subprocess.CompletedProcess[str] | None:
     """Run ``cmd`` from the repo root, returning None if the runner is unavailable."""
     try:
         return subprocess.run(
