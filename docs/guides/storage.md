@@ -41,6 +41,7 @@ The default `PayloadPolicy.NONE` does not persist raw prompts or responses.
 still discarding raw payloads. Hashes are not anonymization for predictable inputs.
 
 **Warning:** `PayloadPolicy.FULL` explicitly persists raw prompt and response data.
-This can store sensitive user content in the SQLite database and its backups. Enable
-it only after assessing access controls, retention, and backup handling. Do not put
-secrets or raw prompts in user-controlled metadata; metadata is stored as supplied.
+This can store sensitive user content in the SQLite database, its backups, and JSONL
+exports. Enable it only after assessing access controls, retention, export handling,
+and backup handling. Do not put secrets or raw prompts in user-controlled metadata;
+metadata is stored as supplied.
