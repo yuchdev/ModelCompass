@@ -1,4 +1,4 @@
-# Model Analytics
+# Model Compass
 
 > **Warning:** Model recommendations produced by this tool are evidence-based estimates, not guarantees. Always validate model choices for your specific workload.
 
@@ -6,7 +6,7 @@ A production-quality Python library and CLI for **request-aware LLM model analyt
 
 ## What it does
 
-Model Analytics provides:
+Model Compass provides:
 
 - OpenRouter and LiteLLM catalog ingestion and normalization
 - Pricing normalization and cost estimation (with Decimal precision)
@@ -26,10 +26,10 @@ Model Analytics provides:
 ## Install from source
 
 ```bash
-git clone https://github.com/yuchdev/LiteModelAnalytics.git
-cd LiteModelAnalytics
+git clone https://github.com/yuchdev/ModelCompass.git
+cd ModelCompass
 uv sync --all-groups
-uv run model-analytics --help
+uv run model-compass --help
 ```
 
 ## Development setup
@@ -39,8 +39,8 @@ uv run model-analytics --help
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and install
-git clone https://github.com/yuchdev/LiteModelAnalytics.git
-cd LiteModelAnalytics
+git clone https://github.com/yuchdev/ModelCompass.git
+cd ModelCompass
 uv sync --all-groups
 ```
 
@@ -57,7 +57,7 @@ uv run ruff check .
 uv run mypy src tests
 
 # Tests (no live API calls)
-uv run pytest -m "not live" --cov=model_analytics --cov-branch --cov-fail-under=90
+uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90
 
 # Docs build
 uv run mkdocs build --strict
@@ -70,14 +70,14 @@ uv build
 
 ```bash
 # Show help
-model-analytics --help
+model-compass --help
 
 # Show version
-model-analytics version
+model-compass version
 
 # Environment health check
-model-analytics doctor
-model-analytics doctor --format json
+model-compass doctor
+model-compass doctor --format json
 ```
 
 ## Configuration

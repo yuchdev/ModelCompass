@@ -7,19 +7,19 @@ import httpx
 import pytest
 import respx
 
-from model_analytics.catalogs.exceptions import (
+from model_compass.catalogs.exceptions import (
     CatalogCacheError,
     CatalogFetchError,
     CatalogParseError,
 )
-from model_analytics.catalogs.openrouter import (
+from model_compass.catalogs.openrouter import (
     OpenRouterCatalogAdapter,
     _as_int,
     _as_time,
     _bool_to_support,
     _flag_from_modalities,
 )
-from model_analytics.domain import SupportStatus
+from model_compass.domain import SupportStatus
 
 
 @pytest.mark.unit

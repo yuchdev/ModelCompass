@@ -4,9 +4,9 @@ from datetime import datetime
 
 import pytest
 
-from model_analytics.application import AnalyticsFacade, analytics
-from model_analytics.catalogs.service import CatalogService
-from model_analytics.domain import CatalogSnapshot
+from model_compass.application import AnalyticsFacade, analytics
+from model_compass.catalogs.service import CatalogService
+from model_compass.domain import CatalogSnapshot
 
 
 class FakeService(CatalogService):

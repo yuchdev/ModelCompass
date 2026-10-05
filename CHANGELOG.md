@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Repository bootstrap: package skeleton, CLI skeleton, quality gates, CI
 - CLI commands: `--help`, `version`, `doctor`
-- Exception hierarchy: `ModelAnalyticsError`, `ConfigurationError`, `DependencyError`
+- Exception hierarchy: `ModelCompassError`, `ConfigurationError`, `DependencyError`
 - Platform-correct paths via `platformdirs`
 - Ruff, MyPy, pytest, coverage configuration
 - Documentation skeleton

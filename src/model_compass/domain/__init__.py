@@ -1,6 +1,6 @@
 """Domain models and helpers."""
 
-from model_analytics.domain.models import (
+from model_compass.domain.models import (
     KNOWN_OPENROUTER_PRICE_KEYS,
     CatalogMergeResult,
     CatalogSnapshot,

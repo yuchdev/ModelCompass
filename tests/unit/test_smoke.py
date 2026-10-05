@@ -11,15 +11,15 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-import model_analytics
-from model_analytics import (
+import model_compass
+from model_compass import (
     ConfigurationError,
     DependencyError,
-    ModelAnalyticsError,
+    ModelCompassError,
     __version__,
 )
-from model_analytics.cli.app import app
-from model_analytics.config import AppPaths, default_paths
+from model_compass.cli.app import app
+from model_compass.config import AppPaths, default_paths
 
 runner = CliRunner()
 
@@ -27,7 +27,7 @@ runner = CliRunner()
 @pytest.mark.unit
 def test_import() -> None:
     """Package imports without error."""
-    assert model_analytics is not None
+    assert model_compass is not None
 
 
 @pytest.mark.unit
@@ -40,9 +40,9 @@ def test_version_is_string() -> None:
 @pytest.mark.unit
 def test_exception_hierarchy() -> None:
     """Public exceptions are correctly related."""
-    assert issubclass(ConfigurationError, ModelAnalyticsError)
-    assert issubclass(DependencyError, ModelAnalyticsError)
-    assert issubclass(ModelAnalyticsError, Exception)
+    assert issubclass(ConfigurationError, ModelCompassError)
+    assert issubclass(DependencyError, ModelCompassError)
+    assert issubclass(ModelCompassError, Exception)
 
 
 @pytest.mark.unit
@@ -50,7 +50,7 @@ def test_cli_help() -> None:
     """CLI --help exits 0."""
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "model-analytics" in result.output.lower() or "usage" in result.output.lower()
+    assert "model-compass" in result.output.lower() or "usage" in result.output.lower()
 
 
 @pytest.mark.unit
@@ -126,14 +126,14 @@ def test_doctor_json_no_secrets() -> None:
 
 @pytest.mark.unit
 def test_import_does_not_create_dirs(tmp_path: Path) -> None:
-    """Importing model_analytics does not create user config/data/cache directories."""
+    """Importing model_compass does not create user config/data/cache directories."""
     env = dict(os.environ)
     env["XDG_CONFIG_HOME"] = str(tmp_path / "config")
     env["XDG_DATA_HOME"] = str(tmp_path / "data")
     env["XDG_CACHE_HOME"] = str(tmp_path / "cache")
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "src")
 
-    code = "import model_analytics, model_analytics.config as c; c.default_paths()"
+    code = "import model_compass, model_compass.config as c; c.default_paths()"
     completed = subprocess.run(
         [sys.executable, "-c", code],
         env=env,
@@ -151,7 +151,7 @@ def test_import_does_not_create_dirs(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_application_module_imports() -> None:
     """The application facade module imports without side effects."""
-    from model_analytics import application
+    from model_compass import application
 
     assert application is not None
 

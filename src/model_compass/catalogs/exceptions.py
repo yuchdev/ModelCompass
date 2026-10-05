@@ -1,9 +1,9 @@
 """Catalog-specific exceptions."""
 
-from model_analytics.exceptions import ModelAnalyticsError
+from model_compass.exceptions import ModelCompassError
 
 
-class CatalogError(ModelAnalyticsError):
+class CatalogError(ModelCompassError):
     """Base catalog error."""
 
 

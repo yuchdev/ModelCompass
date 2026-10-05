@@ -15,7 +15,7 @@ This file defines the execution contract for GitHub Copilot coding agents workin
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests
-uv run pytest -m "not live" --cov=model_analytics --cov-branch --cov-fail-under=90
+uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90
 uv run mkdocs build --strict
 uv build
 ```

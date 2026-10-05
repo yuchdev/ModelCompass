@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
-from model_analytics.domain import CatalogSnapshot, CatalogSource, ModelProfile
+from model_compass.domain import CatalogSnapshot, CatalogSource, ModelProfile
 
 from .litellm import LiteLLMCatalogAdapter
 from .merge import merge_catalog_snapshots

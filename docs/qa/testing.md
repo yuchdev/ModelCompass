@@ -17,7 +17,7 @@
 uv run pytest -m "not live"
 
 # With coverage
-uv run pytest -m "not live" --cov=model_analytics --cov-branch --cov-fail-under=90
+uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90
 
 # Live tests (requires API keys)
 uv run pytest -m live

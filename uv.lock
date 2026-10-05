@@ -1453,7 +1453,7 @@ wheels = [
 ]
 
 [[package]]
-name = "model-analytics"
+name = "model-compass"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from model_analytics.domain import (
+from model_compass.domain import (
     CatalogSnapshot,
     CatalogSource,
     ModelCapabilities,
@@ -18,7 +18,7 @@ from model_analytics.domain import (
     SupportStatus,
     canonical_model_id,
 )
-from model_analytics.exceptions import DependencyError
+from model_compass.exceptions import DependencyError
 
 
 class LiteLLMCatalogAdapter:

@@ -8,10 +8,10 @@ import httpx
 import pytest
 import respx
 
-from model_analytics.catalogs import CatalogService
-from model_analytics.catalogs.exceptions import CatalogCacheError
-from model_analytics.catalogs.litellm import LiteLLMCatalogAdapter
-from model_analytics.catalogs.openrouter import OpenRouterCatalogAdapter
+from model_compass.catalogs import CatalogService
+from model_compass.catalogs.exceptions import CatalogCacheError
+from model_compass.catalogs.litellm import LiteLLMCatalogAdapter
+from model_compass.catalogs.openrouter import OpenRouterCatalogAdapter
 
 
 @pytest.mark.integration

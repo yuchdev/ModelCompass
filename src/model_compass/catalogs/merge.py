@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from model_analytics.domain import (
+from model_compass.domain import (
     CatalogMergeResult,
     CatalogSnapshot,
     ModelCapabilities,

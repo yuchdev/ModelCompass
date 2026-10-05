@@ -1,4 +1,4 @@
-"""CLI entry points for model-analytics."""
+"""CLI entry points for model-compass."""
 
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from model_analytics import __version__
-from model_analytics.config import default_paths
+from model_compass import __version__
+from model_compass.config import default_paths
 
 app = typer.Typer(
-    name="model-analytics",
+    name="model-compass",
     help="Request-aware LLM model analytics, comparison, and selection.",
     no_args_is_help=True,
 )
@@ -75,7 +75,7 @@ def doctor(
         # Use print() to avoid Rich markup processing corrupting JSON output.
         print(json.dumps(data, indent=2))
     else:
-        table = Table(title="model-analytics doctor", show_header=True)
+        table = Table(title="model-compass doctor", show_header=True)
         table.add_column("Check", style="bold")
         table.add_column("Value")
 

@@ -62,7 +62,7 @@ jobs:
       - name: Run tests
         run: |
           uv run pytest -m "not live" \
-            --cov=model_analytics \
+            --cov=model_compass \
             --cov-branch \
             --cov-report=term-missing \
             --cov-fail-under=90

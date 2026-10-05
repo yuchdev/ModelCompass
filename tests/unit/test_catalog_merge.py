@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from model_analytics.catalogs.merge import merge_catalog_snapshots
-from model_analytics.domain import (
+from model_compass.catalogs.merge import merge_catalog_snapshots
+from model_compass.domain import (
     CatalogSnapshot,
     CatalogSource,
     ModelCapabilities,

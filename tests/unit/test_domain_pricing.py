@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from model_analytics.domain import (
+from model_compass.domain import (
     PriceComponent,
     Pricing,
     PricingOverride,

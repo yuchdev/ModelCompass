@@ -3,7 +3,7 @@ requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
 
 [project]
-name = "model-analytics"
+name = "model-compass"
 version = "0.1.0"
 description = "Request-aware LLM model analytics, comparison, and selection"
 readme = "README.md"
@@ -29,12 +29,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yuchdev/LiteModelAnalytics"
-Repository = "https://github.com/yuchdev/LiteModelAnalytics"
-Issues = "https://github.com/yuchdev/LiteModelAnalytics/issues"
+Homepage = "https://github.com/yuchdev/ModelCompass"
+Repository = "https://github.com/yuchdev/ModelCompass"
+Issues = "https://github.com/yuchdev/ModelCompass/issues"
 
 [project.scripts]
-model-analytics = "model_analytics.cli:app"
+model-compass = "model_compass.cli:app"
 
 [dependency-groups]
 dev = [
@@ -111,7 +111,7 @@ addopts = [
 
 [tool.coverage.run]
 branch = true
-source = ["model_analytics"]
+source = ["model_compass"]
 
 [tool.coverage.report]
 exclude_lines = [

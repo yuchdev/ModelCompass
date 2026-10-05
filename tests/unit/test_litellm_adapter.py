@@ -7,8 +7,8 @@ from decimal import Decimal
 
 import pytest
 
-from model_analytics.catalogs.litellm import LiteLLMCatalogAdapter
-from model_analytics.exceptions import DependencyError
+from model_compass.catalogs.litellm import LiteLLMCatalogAdapter
+from model_compass.exceptions import DependencyError
 
 
 @pytest.mark.unit

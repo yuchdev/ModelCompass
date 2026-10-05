@@ -7,8 +7,8 @@ import httpx
 import pytest
 import respx
 
-from model_analytics.catalogs.exceptions import CatalogFetchError, CatalogParseError
-from model_analytics.catalogs.openrouter import OpenRouterCatalogAdapter
+from model_compass.catalogs.exceptions import CatalogFetchError, CatalogParseError
+from model_compass.catalogs.openrouter import OpenRouterCatalogAdapter
 
 
 @pytest.mark.mock

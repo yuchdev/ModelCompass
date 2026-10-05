@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from model_analytics.domain import CatalogSnapshot
+from model_compass.domain import CatalogSnapshot
 
 
 class CatalogProvider(Protocol):

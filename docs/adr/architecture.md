@@ -7,7 +7,7 @@ Application / CLI
         |
         v
 +----------------------------+
-| Model Analytics            |
+| Model Compass              |
 |----------------------------|
 | Request profile            |
 | Capability constraints     |
@@ -54,6 +54,6 @@ The domain layer must not import LiteLLM, Typer, Rich, HTTPX, SQLite, or provide
 
 - All money values use `decimal.Decimal`
 - Platform paths via `platformdirs` — no directories created at import time
-- Public exceptions derive from `ModelAnalyticsError`
+- Public exceptions derive from `ModelCompassError`
 - Capabilities use tri-state: SUPPORTED / UNSUPPORTED / UNKNOWN
 - Missing data never makes a model satisfy a hard positive requirement

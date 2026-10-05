@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from model_analytics.catalogs.openrouter import OpenRouterCatalogAdapter
+from model_compass.catalogs.openrouter import OpenRouterCatalogAdapter
 
 
 @pytest.mark.live

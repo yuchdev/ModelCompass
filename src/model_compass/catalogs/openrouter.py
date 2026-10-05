@@ -11,9 +11,9 @@ from typing import Any
 
 import httpx
 
-from model_analytics import __version__
-from model_analytics.config import default_paths
-from model_analytics.domain import (
+from model_compass import __version__
+from model_compass.config import default_paths
+from model_compass.domain import (
     KNOWN_OPENROUTER_PRICE_KEYS,
     CatalogSnapshot,
     CatalogSource,
@@ -98,7 +98,7 @@ class OpenRouterCatalogAdapter:
     async def _fetch_models(self) -> dict[str, Any]:
         url = f"{self._base_url}/api/v1/models"
         headers = {
-            "User-Agent": f"model-analytics/{__version__}",
+            "User-Agent": f"model-compass/{__version__}",
             "Accept": "application/json",
         }
         if self._api_key:

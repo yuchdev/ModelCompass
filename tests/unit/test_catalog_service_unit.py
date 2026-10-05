@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from model_analytics.catalogs.service import CatalogService
-from model_analytics.domain import (
+from model_compass.catalogs.service import CatalogService
+from model_compass.domain import (
     CatalogSnapshot,
     CatalogSource,
     ModelIdentity,

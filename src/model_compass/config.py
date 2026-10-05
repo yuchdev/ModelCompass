@@ -10,8 +10,8 @@ from pathlib import Path
 
 from platformdirs import user_cache_dir, user_config_dir, user_data_dir
 
-_APP_NAME = "model-analytics"
-_APP_AUTHOR = "model-analytics"
+_APP_NAME = "model-compass"
+_APP_AUTHOR = "model-compass"
 
 
 @dataclass(frozen=True)

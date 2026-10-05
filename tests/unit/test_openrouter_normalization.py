@@ -7,9 +7,9 @@ from typing import Any, cast
 
 import pytest
 
-from model_analytics.catalogs.exceptions import CatalogParseError
-from model_analytics.catalogs.openrouter import OpenRouterCatalogAdapter
-from model_analytics.domain import canonical_model_id
+from model_compass.catalogs.exceptions import CatalogParseError
+from model_compass.catalogs.openrouter import OpenRouterCatalogAdapter
+from model_compass.domain import canonical_model_id
 
 
 def _fixture(name: str) -> dict[str, Any]:

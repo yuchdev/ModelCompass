@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from model_analytics.catalogs import CatalogService
+from model_compass.catalogs import CatalogService
 
 
 @dataclass

@@ -1,10 +1,10 @@
-# Contributing to Model Analytics
+# Contributing to Model Compass
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/yuchdev/LiteModelAnalytics.git
-cd LiteModelAnalytics
+git clone https://github.com/yuchdev/ModelCompass.git
+cd ModelCompass
 uv sync --all-groups
 ```
 
@@ -16,7 +16,7 @@ All PRs must pass:
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests
-uv run pytest -m "not live" --cov=model_analytics --cov-branch --cov-fail-under=90
+uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90
 uv run mkdocs build --strict
 uv build
 ```
