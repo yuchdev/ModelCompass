@@ -644,7 +644,14 @@ class InMemoryObservationStore:
                 ):
                     raise ValueError("unsupported JSONL schema version")
                 if envelope.get("record_type") == "observation":
-                    records.append((line_number, Observation.model_validate(envelope["record"])))
+                    record_data = envelope["record"]
+                    if not isinstance(record_data, dict):
+                        raise TypeError("observation record must be an object")
+                    if "observation_id" not in record_data or "timestamp" not in record_data:
+                        raise ValueError(
+                            "observation record requires observation_id and timestamp"
+                        )
+                    records.append((line_number, Observation.model_validate(record_data)))
                 elif envelope.get("record_type") == "benchmark_result":
                     records.append(
                         (line_number, BenchmarkResult.model_validate(envelope["record"]))
