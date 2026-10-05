@@ -225,6 +225,15 @@ def _assess(
     if any(count is not None for count in token_counts):
         token_context = sum(count or 0 for count in token_counts)
         required_context = max(required_context or 0, token_context)
+    if (
+        request.expected_output_tokens is not None
+        and capabilities.max_output_tokens is not None
+        and capabilities.max_output_tokens < request.expected_output_tokens
+    ):
+        reasons.append(
+            f"maximum output tokens {capabilities.max_output_tokens} is below "
+            f"{request.expected_output_tokens}"
+        )
     if required_context is not None and required_context > 0:
         if capabilities.context_length is None:
             if not policy.allow_unknown_capabilities:
