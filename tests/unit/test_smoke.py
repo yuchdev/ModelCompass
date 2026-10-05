@@ -13,9 +13,13 @@ from typer.testing import CliRunner
 
 import model_compass
 from model_compass import (
+    BenchmarkError,
     ConfigurationError,
     DependencyError,
     ModelCompassError,
+    PricingError,
+    SelectionError,
+    StorageError,
     __version__,
 )
 from model_compass.cli.app import app
@@ -42,6 +46,10 @@ def test_exception_hierarchy() -> None:
     """Public exceptions are correctly related."""
     assert issubclass(ConfigurationError, ModelCompassError)
     assert issubclass(DependencyError, ModelCompassError)
+    assert issubclass(BenchmarkError, ModelCompassError)
+    assert issubclass(PricingError, ModelCompassError)
+    assert issubclass(SelectionError, ModelCompassError)
+    assert issubclass(StorageError, ModelCompassError)
     assert issubclass(ModelCompassError, Exception)
 
 
