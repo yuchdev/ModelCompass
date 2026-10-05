@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from model_compass.benchmarks import BenchmarkReport
@@ -19,7 +20,9 @@ from model_compass.execution import (
 )
 from model_compass.metrics import Observation, ObservationSummary
 from model_compass.selection import (
+    QualityProvider,
     RequestCostEstimate,
+    SelectionConstraint,
     SelectionDataPolicy,
     SelectionPolicy,
     SelectionResult,
@@ -58,9 +61,15 @@ class AnalyticsFacade:
             min_samples=min_samples,
         )
 
-    def estimate_cost(self, profile: ModelProfile, request: RequestProfile) -> RequestCostEstimate:
+    def estimate_cost(
+        self,
+        profile: ModelProfile,
+        request: RequestProfile,
+        *,
+        now_utc: datetime | None = None,
+    ) -> RequestCostEstimate:
         """Estimate the Decimal cost for a request and model profile."""
-        return estimate_request_cost(profile, request)
+        return estimate_request_cost(profile, request, now_utc=now_utc)
 
     def select(
         self,
@@ -68,17 +77,51 @@ class AnalyticsFacade:
         request: RequestProfile,
         *,
         policy: SelectionPolicy = SelectionPolicy.BEST,
+        objective: SelectionPolicy | str | None = None,
         missing_data: SelectionDataPolicy | None = None,
+        quality_provider: QualityProvider | None = None,
+        constraints: tuple[SelectionConstraint, ...] = (),
+        min_quality: Decimal | None = None,
+        max_cost_usd: Decimal | None = None,
+        max_latency_ms: int | Decimal | None = None,
+        min_reliability: Decimal | None = None,
+        required_capabilities: tuple[str, ...] = (),
+        minimum_context: int | None = None,
+        allowed_model_ids: tuple[str, ...] = (),
+        blocked_model_ids: tuple[str, ...] = (),
+        allowed_gateways: tuple[str, ...] = (),
+        blocked_gateways: tuple[str, ...] = (),
+        allowed_providers: tuple[str, ...] = (),
+        blocked_providers: tuple[str, ...] = (),
+        raise_on_empty: bool = False,
+        now_utc: datetime | None = None,
     ) -> SelectionResult:
-        """Select a model using task-matched local observations."""
+        """Select a model using task-matched evidence and composable constraints."""
         task = request.task or "general"
         return select_model(
             profiles,
             request,
             policy=policy,
+            objective=objective,
             observations=self._observations().list(task=task),
             quality_evidence=self._observations().list_quality_evidence(task=task),
+            quality_provider=quality_provider,
             missing_data=missing_data,
+            constraints=constraints,
+            min_quality=min_quality,
+            max_cost_usd=max_cost_usd,
+            max_latency_ms=max_latency_ms,
+            min_reliability=min_reliability,
+            required_capabilities=required_capabilities,
+            minimum_context=minimum_context,
+            allowed_model_ids=allowed_model_ids,
+            blocked_model_ids=blocked_model_ids,
+            allowed_gateways=allowed_gateways,
+            blocked_gateways=blocked_gateways,
+            allowed_providers=allowed_providers,
+            blocked_providers=blocked_providers,
+            raise_on_empty=raise_on_empty,
+            now_utc=now_utc,
         )
 
     def record_benchmark(self, report: BenchmarkReport) -> None:

@@ -35,6 +35,13 @@ class Observation(BaseModel):
             raise ValueError("model_id and task must not be empty")
         return value
 
+    @field_validator("timestamp")
+    @classmethod
+    def _normalize_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamps must include a timezone")
+        return value.astimezone(UTC)
+
     @field_validator("actual_cost_usd", "quality_score", mode="before")
     @classmethod
     def _decimal_values(cls, value: object) -> Decimal | None:
@@ -73,6 +80,13 @@ class QualityEvidence(BaseModel):
     dataset: str | None = None
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+    @field_validator("evaluated_at")
+    @classmethod
+    def _normalize_evaluated_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamps must include a timezone")
+        return value.astimezone(UTC)
+
     @field_validator("quality_score", mode="before")
     @classmethod
     def _decimal_quality(cls, value: object) -> Decimal:
@@ -94,12 +108,16 @@ class MetricSummary(BaseModel):
     model_id: str
     task: str
     sample_size: int
+    success_count: int
     reliability: Decimal
     mean_latency_ms: Decimal
     median_latency_ms: Decimal
     p95_latency_ms: int
     mean_cost_usd: Decimal | None = None
     mean_quality: Decimal | None = None
+    quality_sample_size: int = 0
+    observed_at: datetime | None = None
+    quality_observed_at: datetime | None = None
 
 
 def summarize_observations(
@@ -115,16 +133,25 @@ def summarize_observations(
     qualities = [item.quality_score for item in selected if item.quality_score is not None]
     p95_index = max(0, (95 * len(latencies) + 99) // 100 - 1)
     n = Decimal(len(selected))
+    success_count = sum(item.succeeded for item in selected)
     return MetricSummary(
         model_id=model_id,
         task=task,
         sample_size=len(selected),
-        reliability=Decimal(sum(item.succeeded for item in selected)) / n,
+        success_count=success_count,
+        reliability=Decimal(success_count) / n,
         mean_latency_ms=Decimal(sum(latencies)) / n,
         median_latency_ms=Decimal(str(median(latencies))),
         p95_latency_ms=latencies[p95_index],
         mean_cost_usd=sum(costs, Decimal("0")) / len(costs) if costs else None,
         mean_quality=sum(qualities, Decimal("0")) / len(qualities) if qualities else None,
+        quality_sample_size=len(qualities),
+        observed_at=max(item.timestamp for item in selected),
+        quality_observed_at=(
+            max(item.timestamp for item in selected if item.quality_score is not None)
+            if qualities
+            else None
+        ),
     )
 
 

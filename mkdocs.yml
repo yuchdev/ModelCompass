@@ -31,9 +31,12 @@ nav:
       - Request profiles: concepts/request-profile.md
       - Cost estimation: concepts/cost-estimation.md
       - Observations: concepts/observations.md
+      - Selection: concepts/selection.md
+      - Pareto analysis: concepts/pareto.md
   - Guides:
       - Catalogs: guides/catalogs.md
       - Analytics and selection: guides/analytics.md
+      - Selection policies: guides/selection-policies.md
       - Storage: guides/storage.md
   - Testing:
       - Overview: testing.md

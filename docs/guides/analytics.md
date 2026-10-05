@@ -43,6 +43,11 @@ transparent heuristic, not a universally optimal score.
 `pareto_frontier` exposes tradeoffs across quality/reliability (maximize) and
 cost/latency (minimize) without collapsing them to one score.
 
+For the detailed constraint reason codes, evidence types, conservative
+reliability estimator, and policy tie-break rules, see the
+[selection policies guide](selection-policies.md), [selection concept](../concepts/selection.md),
+and [Pareto concept](../concepts/pareto.md).
+
 ## Observations
 
 An `Observation` records a task label, model, timestamp, success, latency, token

@@ -7,16 +7,25 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from model_compass.domain import ModelCapabilities, ModelProfile, RequestProfile
 from model_compass.metrics import CostEstimate, TokenEstimate, TokenEstimator, estimate_cost
+from model_compass.metrics.task_observations import Observation, QualityEvidence
+from model_compass.selection.constraints import ConstraintResult, SelectionConstraint
+from model_compass.selection.engine import (
+    RequestCostEstimate,
+    SelectionDataPolicy,
+    SelectionPolicy,
+    select_model,
+)
+from model_compass.selection.evidence import MetricEvidence, QualityProvider
 
 from .capabilities import EligibilityResult, MissingDataPolicy, check_eligibility
 
 
 class CandidateAnalysis(BaseModel):
-    """Eligibility, usage, pricing, and capabilities for one model."""
+    """Eligibility, usage, evidence, policy ranks, and capabilities for one model."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -25,6 +34,13 @@ class CandidateAnalysis(BaseModel):
     token_estimate: TokenEstimate
     cost: CostEstimate
     capabilities: ModelCapabilities
+    quality_evidence: MetricEvidence[Decimal] | None = None
+    latency_evidence: MetricEvidence[Decimal] | None = None
+    reliability_evidence: MetricEvidence[Decimal] | None = None
+    rank_by_policy: dict[str, int] = Field(default_factory=dict)
+    selection_eligible: bool = True
+    constraint_rejections: tuple[ConstraintResult, ...] = ()
+    pareto_member: bool | None = None
 
 
 class ComparisonReport(BaseModel):
@@ -34,6 +50,7 @@ class ComparisonReport(BaseModel):
 
     request: RequestProfile
     candidates: tuple[CandidateAnalysis, ...]
+    selected_policy: SelectionPolicy | None = None
 
     def to_json(self) -> str:
         """Serialize in stable key order and without formatting-dependent whitespace."""
@@ -58,26 +75,86 @@ def compare_models(
     unit_usage: Mapping[str, Decimal | int] | None = None,
     missing_data_policy: MissingDataPolicy = MissingDataPolicy.REJECT,
     now_utc: datetime | None = None,
+    observations: Sequence[Observation] = (),
+    quality_evidence: Sequence[QualityEvidence] = (),
+    quality_provider: QualityProvider | None = None,
+    constraints: Sequence[SelectionConstraint] = (),
+    policies: Sequence[SelectionPolicy] = tuple(SelectionPolicy),
+    selected_policy: SelectionPolicy | None = None,
 ) -> ComparisonReport:
     """Analyze candidates without invoking any model or provider service."""
-    candidates: list[CandidateAnalysis] = []
-    for model in sorted(models, key=lambda item: item.identity.canonical_id):
-        token_estimate = token_estimator.estimate(
+    selected_policy = selected_policy or SelectionPolicy.BEST
+    selection_policies = tuple(dict.fromkeys((*policies, selected_policy)))
+    ordered_models = tuple(sorted(models, key=lambda item: item.identity.canonical_id))
+    token_estimates = {
+        model.identity.canonical_id: token_estimator.estimate(
             model=model.identity.model_id,
             prompt=prompt,
             messages=messages,
             explicit_input_tokens=request.explicit_input_tokens,
             expected_output_tokens=request.expected_output_tokens,
         )
-        cost = estimate_cost(
+        for model in ordered_models
+    }
+    cost_estimates = {
+        model.identity.canonical_id: estimate_cost(
             model,
-            token_estimate,
+            token_estimates[model.identity.canonical_id],
             cached_input_read_tokens=cached_input_read_tokens,
             cached_input_write_tokens=cached_input_write_tokens,
             reasoning_tokens=reasoning_tokens,
             unit_usage=unit_usage,
             now_utc=now_utc,
         )
+        for model in ordered_models
+    }
+    request_cost_estimates = {
+        model_id: RequestCostEstimate(
+            model_id=model_id,
+            amount_usd=cost.total if cost.complete else None,
+            known_amount_usd=cost.total,
+            missing_components=tuple(cost.assumptions) if not cost.complete else (),
+        )
+        for model_id, cost in cost_estimates.items()
+    }
+    selection_data_policy = SelectionDataPolicy(
+        allow_unknown_capabilities=missing_data_policy == MissingDataPolicy.ALLOW,
+        reject_missing_quality=missing_data_policy == MissingDataPolicy.REJECT,
+        reject_missing_latency=missing_data_policy == MissingDataPolicy.REJECT,
+        reject_missing_cost=missing_data_policy == MissingDataPolicy.REJECT,
+        reject_missing_reliability=missing_data_policy == MissingDataPolicy.REJECT,
+    )
+    policy_results = {
+        policy: select_model(
+            ordered_models,
+            request,
+            policy=policy,
+            observations=observations,
+            quality_evidence=quality_evidence,
+            quality_provider=quality_provider,
+            missing_data=selection_data_policy,
+            request_cost_estimates=request_cost_estimates,
+            constraints=constraints,
+            now_utc=now_utc,
+        )
+        for policy in selection_policies
+    }
+    primary_result = policy_results.get(selected_policy)
+    if primary_result is None and policy_results:
+        primary_result = next(iter(policy_results.values()))
+    assessments = (
+        {item.model_id: item for item in primary_result.assessments}
+        if primary_result is not None
+        else {}
+    )
+    ranks = {
+        policy.value: {item.model_id: index for index, item in enumerate(result.ranked, start=1)}
+        for policy, result in policy_results.items()
+    }
+    candidates: list[CandidateAnalysis] = []
+    for model in ordered_models:
+        token_estimate = token_estimates[model.identity.canonical_id]
+        cost = cost_estimates[model.identity.canonical_id]
         eligibility = check_eligibility(
             model,
             request,
@@ -110,6 +187,49 @@ def compare_models(
                 token_estimate=token_estimate,
                 cost=cost,
                 capabilities=model.capabilities,
+                quality_evidence=(
+                    assessments[model.identity.canonical_id].quality_evidence
+                    if model.identity.canonical_id in assessments
+                    else None
+                ),
+                latency_evidence=(
+                    assessments[model.identity.canonical_id].latency_evidence
+                    if model.identity.canonical_id in assessments
+                    else None
+                ),
+                reliability_evidence=(
+                    assessments[model.identity.canonical_id].reliability_evidence
+                    if model.identity.canonical_id in assessments
+                    else None
+                ),
+                rank_by_policy={
+                    policy: values[model.identity.canonical_id]
+                    for policy, values in ranks.items()
+                    if model.identity.canonical_id in values
+                },
+                selection_eligible=(
+                    assessments[model.identity.canonical_id].eligible
+                    if model.identity.canonical_id in assessments
+                    else False
+                ),
+                constraint_rejections=(
+                    tuple(
+                        result
+                        for result in assessments[model.identity.canonical_id].constraint_results
+                        if not result.passed
+                    )
+                    if model.identity.canonical_id in assessments
+                    else ()
+                ),
+                pareto_member=(
+                    assessments[model.identity.canonical_id].pareto_member
+                    if model.identity.canonical_id in assessments
+                    else None
+                ),
             )
         )
-    return ComparisonReport(request=request, candidates=tuple(candidates))
+    return ComparisonReport(
+        request=request,
+        candidates=tuple(candidates),
+        selected_policy=selected_policy,
+    )
