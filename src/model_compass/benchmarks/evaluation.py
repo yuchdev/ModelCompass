@@ -91,6 +91,12 @@ def evaluate_benchmark(
     """Score supplied model outputs without making network calls."""
     if not dataset.cases:
         raise BenchmarkError("benchmark dataset must contain at least one case")
+    case_ids = [case.case_id for case in dataset.cases]
+    duplicates = sorted({case_id for case_id in case_ids if case_ids.count(case_id) > 1})
+    if duplicates:
+        raise BenchmarkError(
+            f"benchmark dataset contains duplicate case ids: {', '.join(duplicates)}"
+        )
     unknown = set(outputs) - {case.case_id for case in dataset.cases}
     if unknown:
         raise BenchmarkError(f"outputs contain unknown case ids: {', '.join(sorted(unknown))}")
@@ -120,7 +126,10 @@ def _matches(evaluator: EvaluatorType, expected: str, actual: str) -> bool:
     if evaluator == EvaluatorType.EXACT:
         return expected == actual
     if evaluator == EvaluatorType.REGEX:
-        return re.fullmatch(expected, actual) is not None
+        try:
+            return re.fullmatch(expected, actual) is not None
+        except re.error as exc:
+            raise BenchmarkError(f"invalid regex evaluator pattern: {exc}") from exc
     if evaluator == EvaluatorType.JSON:
         try:
             return bool(json.loads(expected) == json.loads(actual))

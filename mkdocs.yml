@@ -29,7 +29,6 @@ nav:
       - Catalogs: guides/catalogs.md
       - Analytics and selection: guides/analytics.md
   - Testing: testing.md
-  - Testing: testing.md
 
 markdown_extensions:
   - pymdownx.highlight

@@ -8,6 +8,7 @@ from model_compass.benchmarks import (
     EvaluatorType,
     evaluate_benchmark,
 )
+from model_compass.exceptions import BenchmarkError
 
 
 @pytest.mark.unit
@@ -57,3 +58,30 @@ def test_benchmark_missing_and_unknown_outputs_are_explicit() -> None:
         evaluate_benchmark(dataset, {"unexpected": "answer"}, model_id="test:model")
     with pytest.raises(ValueError, match="at least one"):
         evaluate_benchmark(dataset.model_copy(update={"cases": ()}), {}, model_id="test:model")
+
+
+@pytest.mark.unit
+def test_benchmark_rejects_duplicate_case_ids() -> None:
+    dataset = BenchmarkDataset(
+        name="fixture",
+        task="qa",
+        evaluator=EvaluatorType.EXACT,
+        cases=(
+            BenchmarkCase(case_id="one", input_text="q1", expected_output="a1"),
+            BenchmarkCase(case_id="one", input_text="q2", expected_output="a2"),
+        ),
+    )
+    with pytest.raises(BenchmarkError, match="duplicate case ids: one"):
+        evaluate_benchmark(dataset, {"one": "a1"}, model_id="test:model")
+
+
+@pytest.mark.unit
+def test_benchmark_invalid_regex_raises_benchmark_error() -> None:
+    dataset = BenchmarkDataset(
+        name="fixture",
+        task="qa",
+        evaluator=EvaluatorType.REGEX,
+        cases=(BenchmarkCase(case_id="one", input_text="q", expected_output="("),),
+    )
+    with pytest.raises(BenchmarkError, match="invalid regex"):
+        evaluate_benchmark(dataset, {"one": "a"}, model_id="test:model")

@@ -192,6 +192,17 @@ def estimate(
     console.print(table)
 
 
+def _modality_kwargs(
+    input_modalities: list[str] | None, output_modalities: list[str] | None
+) -> dict[str, frozenset[str]]:
+    kwargs: dict[str, frozenset[str]] = {}
+    if input_modalities:
+        kwargs["input_modalities"] = frozenset(input_modalities)
+    if output_modalities:
+        kwargs["output_modalities"] = frozenset(output_modalities)
+    return kwargs
+
+
 @app.command()
 def select(
     task: Annotated[str, typer.Option(help="Task label for task-specific evidence")] = "general",
@@ -200,6 +211,17 @@ def select(
     ] = None,
     output_tokens: Annotated[
         int | None, typer.Option("--output-tokens", min=0, help="Expected completion token count")
+    ] = None,
+    input_modalities: Annotated[
+        list[str] | None,
+        typer.Option("--input-modality", help="Required input modality (repeatable)"),
+    ] = None,
+    output_modalities: Annotated[
+        list[str] | None,
+        typer.Option("--output-modality", help="Required output modality (repeatable)"),
+    ] = None,
+    minimum_context: Annotated[
+        int | None, typer.Option("--minimum-context", min=0, help="Minimum context window")
     ] = None,
     max_cost: Annotated[
         str | None, typer.Option("--max-cost", help="Maximum estimated cost in USD")
@@ -226,6 +248,8 @@ def select(
             task=task,
             estimated_input_tokens=input_tokens,
             expected_output_tokens=output_tokens,
+            **_modality_kwargs(input_modalities, output_modalities),
+            minimum_context=minimum_context,
             max_cost_usd=_parse_decimal_option(max_cost, "--max-cost"),
             min_quality=_parse_decimal_option(min_quality, "--min-quality"),
             max_latency_ms=max_latency_ms,

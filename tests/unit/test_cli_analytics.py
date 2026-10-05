@@ -451,3 +451,48 @@ def test_select_invalid_decimal_returns_actionable_error(monkeypatch: pytest.Mon
     result = runner.invoke(app, ["select", "--max-cost", "not-money"])
     assert result.exit_code == 1
     assert "--max-cost must be a decimal number" in result.output
+
+
+@pytest.mark.unit
+def test_select_accepts_modality_and_context_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = _profile()
+    seen: list[RequestProfile] = []
+
+    class FakeAnalytics:
+        catalog = SimpleNamespace(
+            refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile})
+        )
+
+        @staticmethod
+        def select(
+            profiles: list[ModelProfile], request: RequestProfile, *, policy: SelectionPolicy
+        ) -> SelectionResult:
+            seen.append(request)
+            return select_model(profiles, request, policy=policy)
+
+    monkeypatch.setattr(cli_app_module, "analytics", FakeAnalytics())
+    result = runner.invoke(
+        app,
+        [
+            "select",
+            "--format",
+            "json",
+            "--input-modality",
+            "text",
+            "--output-modality",
+            "text",
+            "--minimum-context",
+            "500",
+        ],
+    )
+    assert result.exit_code == 0
+    assert seen[0].input_modalities == frozenset({"text"})
+    assert seen[0].output_modalities == frozenset({"text"})
+    assert seen[0].minimum_context == 500
+
+    rejected = runner.invoke(
+        app,
+        ["select", "--format", "json", "--input-modality", "image", "--minimum-context", "5000"],
+    )
+    assert rejected.exit_code == 0
+    assert json.loads(rejected.output)["selected"] is None

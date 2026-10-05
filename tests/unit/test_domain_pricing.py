@@ -116,3 +116,9 @@ def test_decimal_round_trip_hypothesis(value: Decimal) -> None:
     dumped = component.model_dump(mode="json")
     reloaded = PriceComponent.model_validate(dumped)
     assert reloaded.amount == component.amount
+
+
+@pytest.mark.unit
+def test_price_rejects_negative_decimal() -> None:
+    with pytest.raises(ValueError, match="non-negative"):
+        PriceComponent(key="prompt", amount=Decimal("-1"))

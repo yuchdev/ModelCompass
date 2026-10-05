@@ -19,7 +19,10 @@ class ObservationStore:
 
     def __init__(self, database: Path) -> None:
         self._database = database
-        database.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            database.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise StorageError(f"unable to create storage directory: {exc}") from exc
         with self._connection() as connection:
             connection.execute(
                 """

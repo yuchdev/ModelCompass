@@ -95,6 +95,9 @@ def estimate_cost(profile: ModelProfile, request: RequestProfile) -> CostEstimat
             missing.append(key)
         else:
             amount += component.amount * token_count
+    request_fee = prices.get("request")
+    if request_fee is not None:
+        amount += request_fee.amount
     return CostEstimate(
         model_id=profile.identity.canonical_id,
         amount_usd=None if missing else amount,
@@ -219,6 +222,16 @@ def _assess(
             reasons.append(
                 f"context length {capabilities.context_length} is below {required_context}"
             )
+
+    if (
+        request.expected_output_tokens
+        and capabilities.max_output_tokens is not None
+        and capabilities.max_output_tokens < request.expected_output_tokens
+    ):
+        reasons.append(
+            f"max output tokens {capabilities.max_output_tokens} is below "
+            f"{request.expected_output_tokens}"
+        )
 
     cost = estimate_cost(profile, request)
     benchmark_quality = summarize_quality_evidence(identity, request.task, quality_evidence)

@@ -76,3 +76,11 @@ def test_observation_store_wraps_database_errors(tmp_path: Path) -> None:
     with pytest.raises(StorageError, match="database operation failed"):
         store.record(observation)
     assert store.list() == []
+
+
+@pytest.mark.integration
+def test_observation_store_wraps_directory_creation_errors(tmp_path: Path) -> None:
+    blocker = tmp_path / "file"
+    blocker.write_text("not a directory")
+    with pytest.raises(StorageError, match="storage directory"):
+        ObservationStore(blocker / "observations.sqlite3")

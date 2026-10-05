@@ -333,3 +333,30 @@ def test_pareto_frontier_uses_selected_objectives_and_excludes_unknowns() -> Non
     assert [item.model_id for item in frontier] == ["a", "b"]
     with pytest.raises(ValueError, match="at least one"):
         pareto_frontier(candidates, [])
+
+
+@pytest.mark.unit
+def test_cost_estimate_includes_request_fee_once() -> None:
+    profile = make_profile("fee")
+    pricing = profile.pricing.model_copy(
+        update={
+            "components": {
+                **profile.pricing.components,
+                "request": PriceComponent(key="request", amount=Decimal("0.01")),
+            }
+        }
+    )
+    profile = profile.model_copy(update={"pricing": pricing})
+    request = RequestProfile(estimated_input_tokens=100, expected_output_tokens=20)
+    assert estimate_cost(profile, request).amount_usd == Decimal("0.010140")
+
+
+@pytest.mark.unit
+def test_selection_rejects_model_with_small_max_output_limit() -> None:
+    profile = make_profile("capped")
+    capabilities = profile.capabilities.model_copy(update={"max_output_tokens": 1})
+    profile = profile.model_copy(update={"capabilities": capabilities})
+    request = RequestProfile(estimated_input_tokens=10, expected_output_tokens=500)
+    result = select_model([profile], request)
+    assert result.selected is None
+    assert any("max output tokens" in reason for reason in result.assessments[0].reasons)

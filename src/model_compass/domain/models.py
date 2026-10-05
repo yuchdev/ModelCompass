@@ -103,7 +103,9 @@ class PriceComponent(BaseModel):
     @field_validator("amount")
     @classmethod
     def _non_negative(cls, value: Decimal) -> Decimal:
-        if not value.is_finite() or value < Decimal("0"):
+        if not value.is_finite():
+            raise ValueError("price must be a finite number")
+        if value < Decimal("0"):
             raise ValueError("price must be non-negative")
         return value
 

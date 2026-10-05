@@ -24,6 +24,13 @@ Unknown required capability support is rejected by default. A quality or
 latency threshold also rejects candidates without matching evidence by
 default. Customize these rules explicitly with `MissingDataPolicy`.
 
+Candidates are also rejected when a known `max_output_tokens` limit is below
+`expected_output_tokens`. Cost estimates add the per-request price component
+(when present) once per estimate, alongside prompt and completion token costs.
+
+The `select` CLI exposes these constraints, including `--input-modality` and
+`--output-modality` (repeatable) and `--minimum-context`.
+
 ## Choose a policy
 
 Pass normalized profiles to `analytics.select(profiles, request, policy=...)`.
@@ -52,5 +59,9 @@ mapping of case IDs to already-obtained outputs. Exact, regular-expression,
 and JSON evaluators produce per-case results and a Decimal quality score. The
 CLI accepts JSON dataset and output files with `model-compass benchmark`.
 `--record` stores the score, evaluator, dataset, task, and sample count as
-quality evidence. Benchmark quality is stored separately from execution
+quality evidence. Datasets with duplicate case IDs and invalid regular-expression
+patterns are rejected with `BenchmarkError`. Benchmark quality is stored separately from execution
 reliability/latency, and selection uses matching task evidence only.
+
+Storage errors, including failure to create the database directory, are raised
+as `StorageError`.
