@@ -100,7 +100,9 @@ class MetricSummary(BaseModel):
     p95_latency_ms: int
     mean_cost_usd: Decimal | None = None
     mean_quality: Decimal | None = None
+    quality_sample_size: int = 0
     observed_at: datetime | None = None
+    quality_observed_at: datetime | None = None
 
 
 def summarize_observations(
@@ -126,7 +128,13 @@ def summarize_observations(
         p95_latency_ms=latencies[p95_index],
         mean_cost_usd=sum(costs, Decimal("0")) / len(costs) if costs else None,
         mean_quality=sum(qualities, Decimal("0")) / len(qualities) if qualities else None,
+        quality_sample_size=len(qualities),
         observed_at=max(item.timestamp for item in selected),
+        quality_observed_at=(
+            max(item.timestamp for item in selected if item.quality_score is not None)
+            if qualities
+            else None
+        ),
     )
 
 

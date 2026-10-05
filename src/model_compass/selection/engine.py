@@ -548,8 +548,8 @@ def _assess(
             value=summary.mean_quality,
             source="execution_observations",
             task=task,
-            sample_count=summary.sample_size,
-            observed_at=summary.observed_at,
+            sample_count=summary.quality_sample_size,
+            observed_at=summary.quality_observed_at,
             notes=("Sample-weighted mean of exact-task execution observations.",),
         )
     quality = quality_evidence.value if quality_evidence is not None else None
@@ -817,11 +817,18 @@ def _normalize_objectives(
                 normalized = ObjectiveDirection(direction)
             except ValueError as exc:
                 raise SelectionError(f"unsupported Pareto direction: {direction}") from exc
-            directions[_normalize_objective_name(name)] = normalized
+            objective_name = _normalize_objective_name(name)
+            if objective_name not in {"quality", "reliability", "expected_cost", "latency_ms"}:
+                raise SelectionError(f"unsupported Pareto objective: {name}")
+            if objective_name in directions:
+                raise SelectionError(f"duplicate Pareto objective: {objective_name}")
+            directions[objective_name] = normalized
         return directions
     result = {}
     for objective in objectives:
         name = _normalize_objective_name(objective.value)
+        if name not in {"quality", "reliability", "expected_cost", "latency_ms"}:
+            raise SelectionError(f"unsupported Pareto objective: {objective}")
         result[name] = (
             ObjectiveDirection.MAXIMIZE
             if name in {"quality", "reliability"}

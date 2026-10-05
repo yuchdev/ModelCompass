@@ -18,7 +18,7 @@ from model_compass.domain import (
     SupportStatus,
 )
 from model_compass.exceptions import NoEligibleModelError
-from model_compass.metrics import Observation, QualityEvidence
+from model_compass.metrics import Observation, QualityEvidence, summarize_observations
 from model_compass.selection import (
     CandidateAssessment,
     GatewayProviderAllowBlock,
@@ -115,6 +115,36 @@ def test_most_reliable_ranks_large_sample_over_perfect_single_observation() -> N
     assert one.reliability_lower_bound == wilson_lower_bound(1, 1)
     assert result.selected.reliability_evidence is not None
     assert result.selected.reliability_evidence.sample_count == 1000
+
+
+@pytest.mark.unit
+def test_quality_evidence_count_only_includes_scored_observations() -> None:
+    profile = _profile("quality-samples")
+    observations = [
+        Observation(
+            model_id="test:quality-samples",
+            task="task",
+            timestamp=datetime(2026, 2, 1 + index, tzinfo=UTC),
+            succeeded=True,
+            latency_ms=10,
+            quality_score=Decimal("0.8") if index == 0 else None,
+        )
+        for index in range(3)
+    ]
+    summary = summarize_observations("test:quality-samples", "task", observations)
+    assert summary is not None
+    assert summary.sample_size == 3
+    assert summary.quality_sample_size == 1
+    assert summary.quality_observed_at == observations[0].timestamp
+    result = select_model(
+        [profile],
+        RequestProfile(task="task", explicit_input_tokens=1, expected_output_tokens=1),
+        observations=observations,
+    )
+    assert result.selected is not None
+    assert result.selected.quality_evidence is not None
+    assert result.selected.quality_evidence.sample_count == 1
+    assert result.selected.quality_evidence.observed_at == observations[0].timestamp
 
 
 @pytest.mark.unit
@@ -481,6 +511,8 @@ def test_pareto_mapping_dominance_duplicates_and_missing_policy() -> None:
     ]
     with pytest.raises(ValueError, match="missing Pareto"):
         pareto_frontier(candidates, objectives, missing_value_policy="raise")
+    with pytest.raises(ValueError, match="unsupported Pareto objective"):
+        pareto_frontier(candidates, {"qualtiy": ObjectiveDirection.MAXIMIZE})
 
 
 @given(
