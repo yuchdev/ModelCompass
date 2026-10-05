@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,13 @@ import pytest
 from model_compass.catalogs import OpenRouterCatalogAdapter
 from model_compass.domain import RequestProfile
 from model_compass.metrics import FallbackTokenEstimator
-from model_compass.selection import ComparisonReport, compare_models, workload_scenario
+from model_compass.metrics.task_observations import Observation, QualityEvidence
+from model_compass.selection import (
+    ComparisonReport,
+    SelectionPolicy,
+    compare_models,
+    workload_scenario,
+)
 
 FIXTURE_DIR = Path(__file__).parents[1] / "fixtures" / "catalogs"
 
@@ -69,3 +76,79 @@ def test_catalog_request_to_cost_comparison_for_synthetic_scenario() -> None:
     assert report.candidates[0].cost.complete is True
     assert report.candidates[0].eligibility.eligible is False
     assert scenario.profile.explicit_input_tokens == 2048
+
+
+@pytest.mark.integration
+def test_comparison_includes_policy_ranks_evidence_constraints_and_pareto() -> None:
+    catalog_adapter = OpenRouterCatalogAdapter()
+    snapshot = catalog_adapter._parse_payload(
+        json.loads((FIXTURE_DIR / "openrouter_ordinary_text.json").read_text(encoding="utf-8")),
+        clock=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    original = next(iter(snapshot.models.values()))
+    alternative = original.model_copy(
+        update={
+            "identity": original.identity.model_copy(
+                update={
+                    "provider": "test",
+                    "model_id": "alternative",
+                    "canonical_id": "test:alternative",
+                }
+            )
+        }
+    )
+    request = RequestProfile(task="task", explicit_input_tokens=100, expected_output_tokens=20)
+    observations = [
+        Observation(
+            model_id=model_id,
+            task="task",
+            succeeded=index < success_count,
+            latency_ms=latency,
+        )
+        for model_id, success_count, latency in (
+            (original.identity.canonical_id, 4, 10),
+            ("test:alternative", 5, 20),
+        )
+        for index in range(5)
+    ]
+    quality = [
+        QualityEvidence(
+            model_id=model_id,
+            task="task",
+            quality_score=score,
+            sample_size=5,
+            source="synthetic",
+            evaluator_type="exact",
+        )
+        for model_id, score in (
+            (original.identity.canonical_id, Decimal("0.8")),
+            ("test:alternative", Decimal("0.9")),
+        )
+    ]
+    report = compare_models(
+        [original, alternative],
+        request,
+        FallbackTokenEstimator(),
+        observations=observations,
+        quality_evidence=quality,
+        selected_policy=SelectionPolicy.BEST,
+    )
+
+    assert report.selected_policy == SelectionPolicy.BEST
+    assert len(report.candidates) == 2
+    assert all(
+        set(candidate.rank_by_policy) == {policy.value for policy in SelectionPolicy}
+        for candidate in report.candidates
+    )
+    alternative_report = next(
+        candidate for candidate in report.candidates if candidate.model.identity.provider == "test"
+    )
+    assert alternative_report.quality_evidence is not None
+    assert alternative_report.quality_evidence.value == Decimal("0.9")
+    assert alternative_report.reliability_evidence is not None
+    assert alternative_report.reliability_evidence.sample_count == 5
+    assert alternative_report.reliability_evidence.observed_at is not None
+    assert alternative_report.rank_by_policy["best"] == 1
+    assert alternative_report.pareto_member is True
+    restored = ComparisonReport.model_validate_json(report.to_json())
+    assert restored == report
