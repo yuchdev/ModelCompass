@@ -27,6 +27,8 @@ nav:
       - Pricing: concepts/pricing.md
   - Guides:
       - Catalogs: guides/catalogs.md
+      - Analytics and selection: guides/analytics.md
+  - Testing: testing.md
   - Testing: testing.md
 
 markdown_extensions:

@@ -45,14 +45,43 @@ class Observation(BaseModel):
     @field_validator("actual_cost_usd")
     @classmethod
     def _non_negative_cost(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and value < 0:
+        if value is not None and (not value.is_finite() or value < 0):
             raise ValueError("actual_cost_usd must be non-negative")
         return value
 
     @field_validator("quality_score")
     @classmethod
     def _quality_range(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and not Decimal("0") <= value <= Decimal("1"):
+        if value is not None and (
+            not value.is_finite() or not Decimal("0") <= value <= Decimal("1")
+        ):
+            raise ValueError("quality_score must be between 0 and 1")
+        return value
+
+
+class QualityEvidence(BaseModel):
+    """Task-specific quality measurement with benchmark provenance."""
+
+    model_config = ConfigDict(frozen=True)
+
+    model_id: str
+    task: str
+    quality_score: Decimal
+    sample_size: int = Field(ge=1)
+    source: str
+    evaluator_type: str
+    dataset: str | None = None
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("quality_score", mode="before")
+    @classmethod
+    def _decimal_quality(cls, value: object) -> Decimal:
+        return parse_decimal(value)
+
+    @field_validator("quality_score")
+    @classmethod
+    def _quality_range(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or not Decimal("0") <= value <= Decimal("1"):
             raise ValueError("quality_score must be between 0 and 1")
         return value
 
@@ -97,3 +126,15 @@ def summarize_observations(
         mean_cost_usd=sum(costs, Decimal("0")) / len(costs) if costs else None,
         mean_quality=sum(qualities, Decimal("0")) / len(qualities) if qualities else None,
     )
+
+
+def summarize_quality_evidence(
+    model_id: str, task: str, evidence: list[QualityEvidence]
+) -> tuple[Decimal, int] | None:
+    """Return sample-weighted quality from exact-task evidence only."""
+    selected = [item for item in evidence if item.model_id == model_id and item.task == task]
+    if not selected:
+        return None
+    samples = sum(item.sample_size for item in selected)
+    weighted_score = sum((item.quality_score * item.sample_size for item in selected), Decimal("0"))
+    return weighted_score / samples, samples

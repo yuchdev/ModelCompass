@@ -26,6 +26,14 @@ class RequestProfile(BaseModel):
     max_latency_ms: int | None = Field(default=None, ge=0)
     min_quality: Decimal | None = None
 
+    @field_validator("input_modalities", "output_modalities")
+    @classmethod
+    def _normalize_modalities(cls, values: frozenset[str]) -> frozenset[str]:
+        normalized = frozenset(value.strip().lower() for value in values)
+        if "" in normalized:
+            raise ValueError("modalities must not contain empty values")
+        return normalized
+
     @field_validator("task")
     @classmethod
     def _task_not_empty(cls, value: str) -> str:
@@ -43,14 +51,16 @@ class RequestProfile(BaseModel):
     @field_validator("max_cost_usd")
     @classmethod
     def _non_negative_cost(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and value < 0:
+        if value is not None and (not value.is_finite() or value < 0):
             raise ValueError("max_cost_usd must be non-negative")
         return value
 
     @field_validator("min_quality")
     @classmethod
     def _quality_range(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and not Decimal("0") <= value <= Decimal("1"):
+        if value is not None and (
+            not value.is_finite() or not Decimal("0") <= value <= Decimal("1")
+        ):
             raise ValueError("min_quality must be between 0 and 1")
         return value
 

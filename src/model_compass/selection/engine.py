@@ -10,7 +10,14 @@ from pydantic import BaseModel, ConfigDict
 
 from model_compass.domain import ModelProfile, SupportStatus
 from model_compass.domain.requests import MissingDataPolicy, RequestProfile
-from model_compass.metrics.observations import MetricSummary, Observation, summarize_observations
+from model_compass.exceptions import SelectionError
+from model_compass.metrics.observations import (
+    MetricSummary,
+    Observation,
+    QualityEvidence,
+    summarize_observations,
+    summarize_quality_evidence,
+)
 
 
 class SelectionPolicy(StrEnum):
@@ -55,6 +62,7 @@ class CandidateAssessment(BaseModel):
     reliability: Decimal | None = None
     latency_ms: Decimal | None = None
     sample_size: int = 0
+    quality_source: str | None = None
 
 
 class SelectionResult(BaseModel):
@@ -100,6 +108,7 @@ def select_model(
     *,
     policy: SelectionPolicy = SelectionPolicy.BEST,
     observations: Sequence[Observation] = (),
+    quality_evidence: Sequence[QualityEvidence] = (),
     missing_data: MissingDataPolicy | None = None,
 ) -> SelectionResult:
     """Filter hard requirements, then rank eligible models under one policy."""
@@ -110,8 +119,15 @@ def select_model(
         )
         for profile in profiles
     }
+    evidence = list(quality_evidence)
     assessments = tuple(
-        _assess(profile, request, summaries[profile.identity.canonical_id], missing_data)
+        _assess(
+            profile,
+            request,
+            summaries[profile.identity.canonical_id],
+            evidence,
+            missing_data,
+        )
         for profile in profiles
     )
     eligible = [assessment for assessment in assessments if assessment.eligible]
@@ -130,7 +146,7 @@ def pareto_frontier(
 ) -> tuple[CandidateAssessment, ...]:
     """Return non-dominated candidates, excluding unknown selected objectives."""
     if not objectives:
-        raise ValueError("at least one Pareto objective is required")
+        raise SelectionError("at least one Pareto objective is required")
 
     complete = [
         item
@@ -170,6 +186,7 @@ def _assess(
     profile: ModelProfile,
     request: RequestProfile,
     summary: MetricSummary | None,
+    quality_evidence: list[QualityEvidence],
     policy: MissingDataPolicy,
 ) -> CandidateAssessment:
     identity = profile.identity.canonical_id
@@ -187,10 +204,14 @@ def _assess(
         _require_support(reasons, "structured output", capabilities.structured_output, policy)
 
     required_context = request.minimum_context
-    if request.estimated_input_tokens is not None and request.expected_output_tokens is not None:
-        token_context = request.estimated_input_tokens + request.expected_output_tokens
+    token_counts = (
+        request.estimated_input_tokens,
+        request.expected_output_tokens,
+    )
+    if any(count is not None for count in token_counts):
+        token_context = sum(count or 0 for count in token_counts)
         required_context = max(required_context or 0, token_context)
-    if required_context is not None:
+    if required_context is not None and required_context > 0:
         if capabilities.context_length is None:
             if not policy.allow_unknown_capabilities:
                 reasons.append("context length is unknown")
@@ -200,7 +221,10 @@ def _assess(
             )
 
     cost = estimate_cost(profile, request)
-    quality = summary.mean_quality if summary else None
+    benchmark_quality = summarize_quality_evidence(identity, request.task, quality_evidence)
+    quality = (
+        benchmark_quality[0] if benchmark_quality else (summary.mean_quality if summary else None)
+    )
     reliability = summary.reliability if summary else None
     latency = summary.mean_latency_ms if summary else None
     if request.max_cost_usd is not None:
@@ -238,7 +262,26 @@ def _assess(
         quality=quality,
         reliability=reliability,
         latency_ms=latency,
-        sample_size=summary.sample_size if summary else 0,
+        sample_size=(
+            benchmark_quality[1]
+            if benchmark_quality is not None
+            else summary.sample_size
+            if summary
+            else 0
+        ),
+        quality_source=(
+            "; ".join(
+                sorted(
+                    {
+                        f"{item.source}:{item.dataset or item.evaluator_type}"
+                        for item in quality_evidence
+                        if item.model_id == identity and item.task == request.task
+                    }
+                )
+            )
+            if benchmark_quality is not None
+            else ("execution observations" if quality is not None else None)
+        ),
     )
 
 
@@ -293,9 +336,9 @@ def _rank_key(assessment: CandidateAssessment, policy: SelectionPolicy) -> tuple
         if assessment.quality is None or assessment.expected_cost_usd is None:
             return (True, Decimal(0), identity)
         if assessment.expected_cost_usd == 0:
-            return (False, Decimal(0), identity)
-        return (False, -(assessment.quality / assessment.expected_cost_usd), identity)
-    raise ValueError(f"unsupported selection policy: {policy}")
+            return (False, 0, -assessment.quality, identity)
+        return (False, 1, -(assessment.quality / assessment.expected_cost_usd), identity)
+    raise SelectionError(f"unsupported selection policy: {policy}")
 
 
 def _objective_value(assessment: CandidateAssessment, objective: ParetoObjective) -> Decimal | None:

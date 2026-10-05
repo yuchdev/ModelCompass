@@ -14,6 +14,7 @@ from model_compass.domain import (
     SupportStatus,
     parse_decimal,
 )
+from model_compass.exceptions import PricingError
 
 
 @pytest.mark.unit
@@ -30,8 +31,32 @@ def test_parse_decimal(raw: object, expected: Decimal) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("raw", [True, "not-a-price", object()])
+def test_parse_decimal_raises_public_pricing_error(raw: object) -> None:
+    with pytest.raises(PricingError):
+        parse_decimal(raw)
+
+
+@pytest.mark.unit
 def test_support_status_unknown_by_default() -> None:
     assert SupportStatus.UNKNOWN.value == "unknown"
+
+
+@pytest.mark.unit
+def test_request_normalizes_modalities_and_rejects_empty_values() -> None:
+    from model_compass.domain import RequestProfile
+
+    request = RequestProfile(input_modalities=frozenset({" Text ", "IMAGE"}))
+    assert request.input_modalities == frozenset({"text", "image"})
+    with pytest.raises(ValueError, match="modalities must not contain empty"):
+        RequestProfile(input_modalities=frozenset({""}))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", [Decimal("NaN"), Decimal("Infinity")])
+def test_price_rejects_non_finite_decimal(value: Decimal) -> None:
+    with pytest.raises(ValueError, match="finite number"):
+        PriceComponent(key="prompt", amount=value)
 
 
 @pytest.mark.unit

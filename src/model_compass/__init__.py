@@ -2,10 +2,24 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from model_compass.domain import MissingDataPolicy, RequestProfile
 from model_compass.exceptions import (
+    BenchmarkError,
     ConfigurationError,
     DependencyError,
     ModelCompassError,
+    PricingError,
+    SelectionError,
+    StorageError,
+)
+from model_compass.execution import ExecutionError
+from model_compass.metrics import Observation
+from model_compass.selection import (
+    ParetoObjective,
+    SelectionPolicy,
+    estimate_cost,
+    pareto_frontier,
+    select_model,
 )
 
 try:
@@ -16,9 +30,22 @@ except PackageNotFoundError:  # pragma: no cover
 from model_compass.application import analytics
 
 __all__ = [
+    "BenchmarkError",
     "ConfigurationError",
     "DependencyError",
+    "ExecutionError",
+    "MissingDataPolicy",
     "ModelCompassError",
+    "Observation",
+    "ParetoObjective",
+    "PricingError",
+    "RequestProfile",
+    "SelectionError",
+    "SelectionPolicy",
+    "StorageError",
     "__version__",
     "analytics",
+    "estimate_cost",
+    "pareto_frontier",
+    "select_model",
 ]

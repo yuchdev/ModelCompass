@@ -5,9 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from model_compass.benchmarks import BenchmarkReport
 from model_compass.catalogs import CatalogService
 from model_compass.config import default_paths
 from model_compass.domain import MissingDataPolicy, ModelProfile, RequestProfile
+from model_compass.execution import (
+    CompletionRequest,
+    ExecutionBackend,
+    ExecutionError,
+    ExecutionResult,
+    LiteLLMBackend,
+)
 from model_compass.metrics import Observation
 from model_compass.selection import (
     CostEstimate,
@@ -44,12 +52,46 @@ class AnalyticsFacade:
             request,
             policy=policy,
             observations=self._observations().list(task=request.task),
+            quality_evidence=self._observations().list_quality_evidence(task=request.task),
             missing_data=missing_data,
         )
+
+    def record_benchmark(self, report: BenchmarkReport) -> None:
+        """Persist benchmark quality and provenance separately from execution outcomes."""
+        self._observations().record_quality_evidence(report.to_quality_evidence())
 
     def record_observation(self, observation: Observation) -> None:
         """Persist one aggregate execution observation."""
         self._observations().record(observation)
+
+    def list_observations(
+        self, *, model_id: str | None = None, task: str | None = None
+    ) -> list[Observation]:
+        """Return locally recorded aggregate observations."""
+        return self._observations().list(model_id=model_id, task=task)
+
+    async def execute(
+        self,
+        request: CompletionRequest,
+        *,
+        backend: ExecutionBackend | None = None,
+    ) -> ExecutionResult:
+        """Run a completion and persist only aggregate usage observations."""
+        try:
+            result = await (backend or LiteLLMBackend()).complete(request)
+        except ExecutionError as exc:
+            if exc.latency_ms is not None:
+                self.record_observation(
+                    Observation(
+                        model_id=request.model_id,
+                        task=request.task,
+                        succeeded=False,
+                        latency_ms=exc.latency_ms,
+                    )
+                )
+            raise
+        self.record_observation(result.to_observation())
+        return result
 
     def _observations(self) -> ObservationStore:
         if self.observation_store is None:
