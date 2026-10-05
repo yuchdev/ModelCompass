@@ -19,7 +19,7 @@ import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 # Repo root is two levels up from .claude/hooks/.
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -125,7 +125,7 @@ def find_broken_links(md_path: Path) -> list[str]:
     return problems
 
 
-def iter_markdown_files(paths: list[str] | None = None) -> Iterator[Path]:
+def iter_markdown_files(paths: Optional[list[str]] = None) -> Iterator[Path]:
     """Markdown files to scan: the given paths if any, else every .md file
     under docs/ and .claude/."""
     if paths:
@@ -159,7 +159,7 @@ def tool_input(event: dict[str, Any]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def edited_path(event: dict[str, Any]) -> Path | None:
+def edited_path(event: dict[str, Any]) -> Optional[Path]:
     """Resolve the file path targeted by a Write/Edit/MultiEdit tool call."""
     fields = tool_input(event)
     raw = fields.get("file_path") or fields.get("path") or fields.get("notebook_path")

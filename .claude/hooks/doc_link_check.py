@@ -30,15 +30,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from _common import (
-    REPO_ROOT,
-    allow,
-    append_log,
-    edited_path,
-    find_broken_links,
-    iter_markdown_files,
-    read_event,
-)
+from _common import REPO_ROOT, allow, append_log, edited_path, find_broken_links, iter_markdown_files, read_event
 
 
 def check(paths: list[str] | None) -> list[str]:

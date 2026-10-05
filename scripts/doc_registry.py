@@ -24,6 +24,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -125,7 +126,7 @@ def extract_md_links(
     """
     results: list[dict[str, object]] = []
     in_fence = False
-    fence_marker: str | None = None
+    fence_marker: Optional[str] = None
     source_rel = str(source_path.relative_to(REPO_ROOT))
 
     for lineno, raw in enumerate(source_path.read_text(encoding="utf-8").splitlines(), 1):
@@ -373,7 +374,7 @@ def format_report(report: dict[str, object]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     """Entry point.
 
     :return: exit code (0 = clean, 1 = missing references found).

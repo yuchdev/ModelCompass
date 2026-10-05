@@ -24,13 +24,14 @@ import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Optional
 
 from _common import REPO_ROOT, allow, append_log, edited_path, read_event
 
 _OPTIONAL_PIPE_RE = re.compile(r"\|\s*None\b")
 
 
-def _scan_left_type(line: str, bar_pos: int) -> tuple[int, str] | None:
+def _scan_left_type(line: str, bar_pos: int) -> Optional[tuple[int, str]]:
     """Given the index of ``|`` in ``<type> | None``, return
     (start_index, type_text) for the type expression immediately before it,
     honoring bracket nesting (e.g. `dict[str, int] | None`)."""
