@@ -1,140 +1,182 @@
-"""Privacy-conscious empirical observations and exact-task summaries."""
+"""Empirical summaries of measured model executions."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from collections import Counter
+from collections.abc import Iterable
 from decimal import Decimal
-from statistics import median
+from math import ceil
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict
 
-from model_compass.domain.models import parse_decimal
-
-
-class Observation(BaseModel):
-    """One execution outcome; request/message bodies are intentionally absent."""
-
-    model_config = ConfigDict(frozen=True)
-
-    model_id: str
-    task: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    endpoint_id: str | None = None
-    succeeded: bool
-    latency_ms: int = Field(ge=0)
-    actual_cost_usd: Decimal | None = None
-    input_tokens: int | None = Field(default=None, ge=0)
-    output_tokens: int | None = Field(default=None, ge=0)
-    quality_score: Decimal | None = None
-    evaluator_type: str | None = None
-
-    @field_validator("model_id", "task")
-    @classmethod
-    def _non_empty(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("model_id and task must not be empty")
-        return value
-
-    @field_validator("actual_cost_usd", "quality_score", mode="before")
-    @classmethod
-    def _decimal_values(cls, value: object) -> Decimal | None:
-        if value is None:
-            return None
-        return parse_decimal(value)
-
-    @field_validator("actual_cost_usd")
-    @classmethod
-    def _non_negative_cost(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and (not value.is_finite() or value < 0):
-            raise ValueError("actual_cost_usd must be non-negative")
-        return value
-
-    @field_validator("quality_score")
-    @classmethod
-    def _quality_range(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and (
-            not value.is_finite() or not Decimal("0") <= value <= Decimal("1")
-        ):
-            raise ValueError("quality_score must be between 0 and 1")
-        return value
+from model_compass.domain import Observation
 
 
-class QualityEvidence(BaseModel):
-    """Task-specific quality measurement with benchmark provenance."""
+class LatencySummary(BaseModel):
+    """Latency statistics with explicit denominators."""
 
     model_config = ConfigDict(frozen=True)
 
-    model_id: str
-    task: str
-    quality_score: Decimal
-    sample_size: int = Field(ge=1)
-    source: str
-    evaluator_type: str
-    dataset: str | None = None
-    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    @field_validator("quality_score", mode="before")
-    @classmethod
-    def _decimal_quality(cls, value: object) -> Decimal:
-        return parse_decimal(value)
-
-    @field_validator("quality_score")
-    @classmethod
-    def _quality_range(cls, value: Decimal) -> Decimal:
-        if not value.is_finite() or not Decimal("0") <= value <= Decimal("1"):
-            raise ValueError("quality_score must be between 0 and 1")
-        return value
+    sample_count: int
+    latency_sample_count: int
+    mean_latency_ms: Decimal | None
+    p50_latency_ms: Decimal | None
+    p95_latency_ms: Decimal | None
+    ttft_sample_count: int
+    mean_time_to_first_token_ms: Decimal | None
 
 
-class MetricSummary(BaseModel):
-    """Aggregate measurements for a model and exact task."""
+class ReliabilitySummary(BaseModel):
+    """Success rate with sample count and minimum-evidence handling."""
 
     model_config = ConfigDict(frozen=True)
 
-    model_id: str
-    task: str
-    sample_size: int
-    reliability: Decimal
-    mean_latency_ms: Decimal
-    median_latency_ms: Decimal
-    p95_latency_ms: int
-    mean_cost_usd: Decimal | None = None
-    mean_quality: Decimal | None = None
+    sample_count: int
+    success_count: int
+    success_rate: Decimal | None
+    failure_categories: dict[str, int]
+
+
+class CostSummary(BaseModel):
+    """Actual and estimated costs kept separate in every aggregate."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sample_count: int
+    actual_cost_count: int
+    total_actual_cost: Decimal | None
+    mean_actual_cost: Decimal | None
+    estimated_cost_count: int
+    total_estimated_cost: Decimal | None
+    mean_estimated_cost: Decimal | None
+    cost_basis: Literal["actual", "estimated", "mixed", "none"]
+
+
+class UsageSummary(BaseModel):
+    """Average and total input/output token usage."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sample_count: int
+    input_token_sample_count: int
+    total_input_tokens: int | None
+    average_input_tokens: Decimal | None
+    output_token_sample_count: int
+    total_output_tokens: int | None
+    average_output_tokens: Decimal | None
+
+
+class ObservationSummary(BaseModel):
+    """Combined empirical summary; each component carries its own sample counts."""
+
+    model_config = ConfigDict(frozen=True)
+
+    latency: LatencySummary
+    reliability: ReliabilitySummary
+    cost: CostSummary
+    usage: UsageSummary
+    sufficient_samples: bool
 
 
 def summarize_observations(
-    model_id: str, task: str, observations: list[Observation]
-) -> MetricSummary | None:
-    """Summarize observations without silently mixing task-specific evidence."""
-    selected = [item for item in observations if item.model_id == model_id and item.task == task]
-    if not selected:
-        return None
+    observations: Iterable[Observation],
+    *,
+    min_samples: int = 5,
+) -> ObservationSummary:
+    """Summarize observations using nearest-rank p50/p95 and exact Decimal means.
 
-    latencies = sorted(item.latency_ms for item in selected)
-    costs = [item.actual_cost_usd for item in selected if item.actual_cost_usd is not None]
-    qualities = [item.quality_score for item in selected if item.quality_score is not None]
-    p95_index = max(0, (95 * len(latencies) + 99) // 100 - 1)
-    n = Decimal(len(selected))
-    return MetricSummary(
-        model_id=model_id,
-        task=task,
-        sample_size=len(selected),
-        reliability=Decimal(sum(item.succeeded for item in selected)) / n,
-        mean_latency_ms=Decimal(sum(latencies)) / n,
-        median_latency_ms=Decimal(str(median(latencies))),
-        p95_latency_ms=latencies[p95_index],
-        mean_cost_usd=sum(costs, Decimal("0")) / len(costs) if costs else None,
-        mean_quality=sum(qualities, Decimal("0")) / len(qualities) if qualities else None,
+    The nearest-rank percentile is the sorted value at index ``ceil(p*n)-1``.
+    Each metric's derived values are suppressed until at least ``min_samples``
+    observations contain that measurement; its sample count remains visible.
+    """
+    if min_samples < 1:
+        raise ValueError("min_samples must be at least one")
+    rows = tuple(observations)
+    enough = len(rows) >= min_samples
+
+    latencies = [row.latency_ms for row in rows if row.latency_ms is not None]
+    ttfts = [row.time_to_first_token_ms for row in rows if row.time_to_first_token_ms is not None]
+    if len(latencies) >= min_samples:
+        ordered_latency = sorted(latencies)
+        mean_latency: Decimal | None = _mean(latencies)
+        p50: Decimal | None = _nearest_rank(ordered_latency, 0.50)
+        p95: Decimal | None = _nearest_rank(ordered_latency, 0.95)
+    else:
+        mean_latency = None
+        p50 = None
+        p95 = None
+    mean_ttft = _mean(ttfts) if len(ttfts) >= min_samples else None
+
+    successes = sum(row.success for row in rows)
+    failure_categories = Counter(
+        row.failure_category for row in rows if not row.success and row.failure_category
+    )
+    reliability = ReliabilitySummary(
+        sample_count=len(rows),
+        success_count=successes,
+        success_rate=(Decimal(successes) / Decimal(len(rows))) if enough and rows else None,
+        failure_categories=dict(sorted(failure_categories.items())),
+    )
+
+    actual = [row.actual_cost for row in rows if row.actual_cost is not None]
+    estimated = [row.estimated_cost for row in rows if row.estimated_cost is not None]
+    cost_basis: Literal["actual", "estimated", "mixed", "none"]
+    if actual and estimated:
+        cost_basis = "mixed"
+    elif actual:
+        cost_basis = "actual"
+    elif estimated:
+        cost_basis = "estimated"
+    else:
+        cost_basis = "none"
+    cost = CostSummary(
+        sample_count=len(rows),
+        actual_cost_count=len(actual),
+        total_actual_cost=sum(actual, Decimal(0)) if len(actual) >= min_samples else None,
+        mean_actual_cost=_mean(actual) if len(actual) >= min_samples else None,
+        estimated_cost_count=len(estimated),
+        total_estimated_cost=sum(estimated, Decimal(0)) if len(estimated) >= min_samples else None,
+        mean_estimated_cost=_mean(estimated) if len(estimated) >= min_samples else None,
+        cost_basis=cost_basis,
+    )
+
+    inputs = [row.input_tokens for row in rows if row.input_tokens is not None]
+    outputs = [row.output_tokens for row in rows if row.output_tokens is not None]
+    usage = UsageSummary(
+        sample_count=len(rows),
+        input_token_sample_count=len(inputs),
+        total_input_tokens=sum(inputs) if len(inputs) >= min_samples else None,
+        average_input_tokens=_mean_ints(inputs) if len(inputs) >= min_samples else None,
+        output_token_sample_count=len(outputs),
+        total_output_tokens=sum(outputs) if len(outputs) >= min_samples else None,
+        average_output_tokens=_mean_ints(outputs) if len(outputs) >= min_samples else None,
+    )
+
+    return ObservationSummary(
+        latency=LatencySummary(
+            sample_count=len(rows),
+            latency_sample_count=len(latencies),
+            mean_latency_ms=mean_latency,
+            p50_latency_ms=p50,
+            p95_latency_ms=p95,
+            ttft_sample_count=len(ttfts),
+            mean_time_to_first_token_ms=mean_ttft,
+        ),
+        reliability=reliability,
+        cost=cost,
+        usage=usage,
+        sufficient_samples=enough,
     )
 
 
-def summarize_quality_evidence(
-    model_id: str, task: str, evidence: list[QualityEvidence]
-) -> tuple[Decimal, int] | None:
-    """Return sample-weighted quality from exact-task evidence only."""
-    selected = [item for item in evidence if item.model_id == model_id and item.task == task]
-    if not selected:
-        return None
-    samples = sum(item.sample_size for item in selected)
-    weighted_score = sum((item.quality_score * item.sample_size for item in selected), Decimal("0"))
-    return weighted_score / samples, samples
+def _mean(values: list[Decimal]) -> Decimal:
+    return sum(values, Decimal(0)) / Decimal(len(values))
+
+
+def _mean_ints(values: list[int]) -> Decimal:
+    return Decimal(sum(values)) / Decimal(len(values))
+
+
+def _nearest_rank(values: list[Decimal], quantile: float) -> Decimal:
+    return values[max(0, ceil(quantile * len(values)) - 1)]

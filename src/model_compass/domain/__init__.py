@@ -17,10 +17,19 @@ from model_compass.domain.models import (
     canonical_model_id,
     parse_decimal,
 )
+from model_compass.domain.observations import (
+    BenchmarkResult,
+    BenchmarkRun,
+    Observation,
+    PayloadPolicy,
+    QualityEvidence,
+)
 from model_compass.domain.requests import RequestProfile, build_request_profile
 
 __all__ = [
     "KNOWN_OPENROUTER_PRICE_KEYS",
+    "BenchmarkResult",
+    "BenchmarkRun",
     "CatalogMergeResult",
     "CatalogSnapshot",
     "CatalogSource",
@@ -28,10 +37,13 @@ __all__ = [
     "ModelEndpoint",
     "ModelIdentity",
     "ModelProfile",
+    "Observation",
+    "PayloadPolicy",
     "PriceComponent",
     "Pricing",
     "PricingOverride",
     "PricingProvenance",
+    "QualityEvidence",
     "RequestProfile",
     "SupportStatus",
     "build_request_profile",

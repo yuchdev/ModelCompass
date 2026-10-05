@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 
 from model_compass.benchmarks import BenchmarkReport
@@ -16,7 +17,7 @@ from model_compass.execution import (
     ExecutionResult,
     LiteLLMBackend,
 )
-from model_compass.metrics import Observation
+from model_compass.metrics import Observation, ObservationSummary
 from model_compass.selection import (
     RequestCostEstimate,
     SelectionDataPolicy,
@@ -25,7 +26,7 @@ from model_compass.selection import (
     estimate_request_cost,
     select_model,
 )
-from model_compass.storage import ObservationStore
+from model_compass.storage import ObservationStoreProtocol, SQLiteObservationStore
 
 
 @dataclass
@@ -33,7 +34,29 @@ class AnalyticsFacade:
     """Small public facade for application features."""
 
     catalog: CatalogService = field(default_factory=CatalogService)
-    observation_store: ObservationStore | None = None
+    observation_store: ObservationStoreProtocol | None = None
+
+    def summarize_model(
+        self,
+        model_id: str,
+        *,
+        since: datetime | None = None,
+        recent: timedelta | None = None,
+        now_utc: datetime | None = None,
+        task: str | None = None,
+        endpoint: str | None = None,
+        min_samples: int = 5,
+    ) -> ObservationSummary:
+        """Return empirical metrics using the injected storage protocol."""
+        return self._observations().summarize_model(
+            model_id,
+            since=since,
+            recent=recent,
+            now_utc=now_utc,
+            task=task,
+            endpoint=endpoint,
+            min_samples=min_samples,
+        )
 
     def estimate_cost(self, profile: ModelProfile, request: RequestProfile) -> RequestCostEstimate:
         """Estimate the Decimal cost for a request and model profile."""
@@ -95,9 +118,9 @@ class AnalyticsFacade:
         self.record_observation(result.to_observation())
         return result
 
-    def _observations(self) -> ObservationStore:
+    def _observations(self) -> ObservationStoreProtocol:
         if self.observation_store is None:
-            self.observation_store = ObservationStore(
+            self.observation_store = SQLiteObservationStore(
                 default_paths().data_dir / "observations.sqlite3"
             )
         return self.observation_store

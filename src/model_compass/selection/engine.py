@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from model_compass.domain import ModelProfile, RequestProfile, SupportStatus
 from model_compass.exceptions import SelectionError
-from model_compass.metrics.observations import (
+from model_compass.metrics.task_observations import (
     MetricSummary,
     Observation,
     QualityEvidence,
