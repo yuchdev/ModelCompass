@@ -98,6 +98,25 @@ def test_wilson_bound_penalizes_small_samples_and_converges() -> None:
 
 
 @pytest.mark.unit
+def test_wilson_uses_exact_success_count_for_fractional_rates() -> None:
+    profile = _profile("two-of-three")
+    observations = [
+        _observation("test:two-of-three", success=success) for success in (True, True, False)
+    ]
+    summary = summarize_observations("test:two-of-three", "task", observations)
+    assert summary is not None
+    assert summary.success_count == 2
+    result = select_model(
+        [profile],
+        RequestProfile(task="task", explicit_input_tokens=1, expected_output_tokens=1),
+        policy=SelectionPolicy.MOST_RELIABLE,
+        observations=observations,
+    )
+    assert result.selected is not None
+    assert result.selected.reliability_lower_bound == wilson_lower_bound(2, 3)
+
+
+@pytest.mark.unit
 def test_most_reliable_ranks_large_sample_over_perfect_single_observation() -> None:
     profiles = [_profile("one"), _profile("many")]
     observations = [_observation("test:one")]

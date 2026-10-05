@@ -566,8 +566,9 @@ def _assess(
             observed_at=summary.observed_at,
             notes=("Raw success rate; ranking uses a Wilson lower confidence bound.",),
         )
-        success_count = int(summary.reliability * summary.sample_size)
-        lower_bound = wilson_lower_bound(success_count, summary.sample_size, z=data_policy.wilson_z)
+        lower_bound = wilson_lower_bound(
+            summary.success_count, summary.sample_size, z=data_policy.wilson_z
+        )
 
     latency: Decimal | None = None
     latency_evidence: MetricEvidence[Decimal] | None = None

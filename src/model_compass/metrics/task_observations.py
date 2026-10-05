@@ -94,6 +94,7 @@ class MetricSummary(BaseModel):
     model_id: str
     task: str
     sample_size: int
+    success_count: int
     reliability: Decimal
     mean_latency_ms: Decimal
     median_latency_ms: Decimal
@@ -118,11 +119,13 @@ def summarize_observations(
     qualities = [item.quality_score for item in selected if item.quality_score is not None]
     p95_index = max(0, (95 * len(latencies) + 99) // 100 - 1)
     n = Decimal(len(selected))
+    success_count = sum(item.succeeded for item in selected)
     return MetricSummary(
         model_id=model_id,
         task=task,
         sample_size=len(selected),
-        reliability=Decimal(sum(item.succeeded for item in selected)) / n,
+        success_count=success_count,
+        reliability=Decimal(success_count) / n,
         mean_latency_ms=Decimal(sum(latencies)) / n,
         median_latency_ms=Decimal(str(median(latencies))),
         p95_latency_ms=latencies[p95_index],
