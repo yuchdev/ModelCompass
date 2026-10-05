@@ -86,7 +86,7 @@ def test_facade_estimates_and_selects_using_injected_store(tmp_path: Path) -> No
     )
     store = ObservationStore(tmp_path / "data.sqlite3")
     facade = AnalyticsFacade(observation_store=store)
-    request = RequestProfile(task="summary", estimated_input_tokens=2, expected_output_tokens=1)
+    request = RequestProfile(task="summary", explicit_input_tokens=2, expected_output_tokens=1)
 
     assert facade.estimate_cost(profile, request).amount_usd == Decimal("0.04")
     facade.record_observation(

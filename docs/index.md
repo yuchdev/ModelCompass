@@ -27,5 +27,6 @@ catalog; pass `--offline` to use only a cached snapshot.
 - Prompt and message bodies are not written to the observation database.
 - Core selection and benchmark evaluation are deterministic and offline.
 
-See [Architecture](architecture.md), [Pricing](concepts/pricing.md), and
+See [Architecture](architecture.md), [Request profiles](concepts/request-profile.md),
+[Cost estimation](concepts/cost-estimation.md), [Pricing](concepts/pricing.md), and
 [Testing](testing.md) for details.

@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from model_compass.domain import MissingDataPolicy, RequestProfile
+from model_compass.domain import RequestProfile
 from model_compass.exceptions import (
     BenchmarkError,
     ConfigurationError,
@@ -16,8 +16,9 @@ from model_compass.execution import ExecutionError
 from model_compass.metrics import Observation
 from model_compass.selection import (
     ParetoObjective,
+    SelectionDataPolicy,
     SelectionPolicy,
-    estimate_cost,
+    estimate_request_cost,
     pareto_frontier,
     select_model,
 )
@@ -34,18 +35,18 @@ __all__ = [
     "ConfigurationError",
     "DependencyError",
     "ExecutionError",
-    "MissingDataPolicy",
     "ModelCompassError",
     "Observation",
     "ParetoObjective",
     "PricingError",
     "RequestProfile",
+    "SelectionDataPolicy",
     "SelectionError",
     "SelectionPolicy",
     "StorageError",
     "__version__",
     "analytics",
-    "estimate_cost",
+    "estimate_request_cost",
     "pareto_frontier",
     "select_model",
 ]

@@ -21,15 +21,21 @@ plugins:
 
 nav:
   - Home: index.md
-  - Architecture: architecture.md
+  - Architecture:
+      - Overview: architecture.md
+      - Decision record: adr/architecture.md
   - Concepts:
+      - Models and pricing: adr/lite-concepts-draft.md
       - Models: concepts/models.md
       - Pricing: concepts/pricing.md
+      - Request profiles: concepts/request-profile.md
+      - Cost estimation: concepts/cost-estimation.md
   - Guides:
       - Catalogs: guides/catalogs.md
       - Analytics and selection: guides/analytics.md
-  - Testing: testing.md
-  - Testing: testing.md
+  - Testing:
+      - Overview: testing.md
+      - Taxonomy: qa/testing.md
 
 markdown_extensions:
   - pymdownx.highlight

@@ -11,7 +11,7 @@ request = RequestProfile(
     task="code_review",
     input_modalities={"text"},
     output_modalities={"text"},
-    estimated_input_tokens=40_000,
+    explicit_input_tokens=40_000,
     expected_output_tokens=2_000,
     requires_tools=True,
     minimum_context=64_000,
@@ -22,7 +22,7 @@ request = RequestProfile(
 
 Unknown required capability support is rejected by default. A quality or
 latency threshold also rejects candidates without matching evidence by
-default. Customize these rules explicitly with `MissingDataPolicy`.
+default. Customize these rules explicitly with `SelectionDataPolicy`.
 
 ## Choose a policy
 

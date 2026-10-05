@@ -17,14 +17,13 @@ from model_compass.domain.models import (
     canonical_model_id,
     parse_decimal,
 )
-from model_compass.domain.requests import MissingDataPolicy, RequestProfile
+from model_compass.domain.requests import RequestProfile, build_request_profile
 
 __all__ = [
     "KNOWN_OPENROUTER_PRICE_KEYS",
     "CatalogMergeResult",
     "CatalogSnapshot",
     "CatalogSource",
-    "MissingDataPolicy",
     "ModelCapabilities",
     "ModelEndpoint",
     "ModelIdentity",
@@ -35,6 +34,7 @@ __all__ = [
     "PricingProvenance",
     "RequestProfile",
     "SupportStatus",
+    "build_request_profile",
     "canonical_model_id",
     "parse_decimal",
 ]

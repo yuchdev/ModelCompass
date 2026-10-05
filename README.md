@@ -129,7 +129,7 @@ from model_compass import RequestProfile, SelectionPolicy, analytics
 
 request = RequestProfile(
     task="summarization",
-    estimated_input_tokens=2_000,
+    explicit_input_tokens=2_000,
     expected_output_tokens=500,
     max_cost_usd=Decimal("0.02"),
 )
