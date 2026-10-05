@@ -17,6 +17,7 @@ from model_compass.domain.models import (
     canonical_model_id,
     parse_decimal,
 )
+from model_compass.domain.requests import RequestProfile, build_request_profile
 
 __all__ = [
     "KNOWN_OPENROUTER_PRICE_KEYS",
@@ -31,7 +32,9 @@ __all__ = [
     "Pricing",
     "PricingOverride",
     "PricingProvenance",
+    "RequestProfile",
     "SupportStatus",
+    "build_request_profile",
     "canonical_model_id",
     "parse_decimal",
 ]
