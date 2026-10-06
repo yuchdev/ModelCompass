@@ -13,6 +13,7 @@ from model_compass.benchmarks import OfflineBenchmarkReport
 from model_compass.catalogs import CatalogService
 from model_compass.config import default_paths
 from model_compass.domain import ModelProfile, RequestProfile
+from model_compass.exceptions import NoEligibleModelError
 from model_compass.execution import (
     CompletionRequest,
     CostReconciliation,
@@ -203,9 +204,11 @@ class AnalyticsFacade:
             now_utc=now_utc,
             **selection_options,
         )
-        assert selection.selected is not None
-        estimated_before = selection.selected.expected_cost_usd
-        request = execution_request.model_copy(update={"model_id": selection.selected.model_id})
+        chosen = selection.selected
+        if chosen is None:
+            raise NoEligibleModelError(selection.rejection_counts)
+        estimated_before = chosen.expected_cost_usd
+        request = execution_request.model_copy(update={"model_id": chosen.model_id})
         sink = observation_sink if observation_sink is not None else self._observations()
         try:
             result = await (backend or LiteLLMBackend()).execute(request)

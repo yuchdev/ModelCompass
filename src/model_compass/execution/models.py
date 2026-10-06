@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from model_compass.domain import Observation as StoredObservation
 from model_compass.execution.errors import ExecutionError
-from model_compass.metrics import Observation
+from model_compass.metrics import Observation as TaskObservation
 
 COST_SOURCE_ACTUAL = "provider_reported"
 COST_SOURCE_COMPUTED = "computed"
@@ -35,12 +35,12 @@ _SECRET_KEYS = frozenset(
 _FALLBACK_KEYS = frozenset({"fallbacks", "context_window_fallback_dict", "content_policy_fallbacks", "models", "route"})
 
 
-def _contains_key(value: Any, keys: frozenset[str], *, suffix: str = "\0") -> Optional[str]:
+def _contains_key(value: Any, keys: frozenset[str], *, suffix: Optional[str] = None) -> Optional[str]:
     """Return the first key (normalized to lower snake case) in `keys` found in nested data."""
     if isinstance(value, dict):
         for key, nested in value.items():
             normalized = str(key).lower().replace("-", "_")
-            if normalized in keys or normalized.endswith(suffix):
+            if normalized in keys or (suffix is not None and normalized.endswith(suffix)):
                 return str(key)
             found = _contains_key(nested, keys, suffix=suffix)
             if found is not None:
@@ -230,9 +230,9 @@ class ExecutionResult(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    def to_observation(self) -> Observation:
+    def to_observation(self) -> TaskObservation:
         """Convert usage into a prompt-free local observation."""
-        return Observation(
+        return TaskObservation(
             model_id=self.model_id,
             task=self.task,
             succeeded=True,

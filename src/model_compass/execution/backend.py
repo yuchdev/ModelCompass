@@ -15,6 +15,8 @@ from collections.abc import Awaitable, Callable
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Protocol, cast
 
+import httpx
+
 from model_compass.exceptions import ConfigurationError, DependencyError
 from model_compass.execution.errors import (
     ExecutionError,
@@ -79,7 +81,10 @@ class LiteLLMBackend:
         model_resolver: Optional[Callable[[str], str]] = None,
         on_text_delta: Optional[Callable[[str], None]] = None,
     ):
-        """Store injected collaborators, the API key, and the bounded retry policy."""
+        """Store injected collaborators, the API key, and the bounded retry policy.
+
+        ``on_text_delta`` runs inside the guarded stream loop and must not raise.
+        """
         if not 0 <= max_retries <= MAX_RETRIES_LIMIT:
             raise ConfigurationError(f"max_retries must be between 0 and {MAX_RETRIES_LIMIT}")
         self._completion_call = completion_call
@@ -213,6 +218,8 @@ class LiteLLMBackend:
         if not choices:
             raise MalformedResponseError("LiteLLM completion returned no choices")
         message = _get(choices[0], "message", None)
+        if message is None:
+            raise MalformedResponseError("LiteLLM completion returned a choice without a message")
         content = _get(message, "content", None)
         if isinstance(content, str):
             output_text = content
@@ -294,7 +301,14 @@ _NORMALIZATION_ERRORS = (KeyError, TypeError, ValueError, AttributeError, IndexE
 
 def _failure_types() -> tuple[type[BaseException], ...]:
     """Return the exception types a completion call can raise that map to ExecutionError."""
-    builtin: tuple[type[BaseException], ...] = (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError)
+    builtin: tuple[type[BaseException], ...] = (
+        TimeoutError,
+        ConnectionError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        httpx.HTTPError,
+    )
     if importlib.util.find_spec("litellm") is None:
         return builtin
     litellm_exceptions = importlib.import_module("litellm.exceptions")

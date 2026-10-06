@@ -96,8 +96,8 @@ _BY_NAME: tuple[tuple[tuple[str, ...], type[ExecutionError]], ...] = (
     (("ContextWindowExceededError", "ContentPolicyViolationError"), ExecutionContextError),
     (("AuthenticationError", "PermissionDeniedError"), ExecutionAuthenticationError),
     (("RateLimitError",), ExecutionRateLimitError),
-    (("Timeout", "TimeoutError", "APITimeoutError"), ExecutionTimeoutError),
-    (("APIConnectionError", "ConnectionError"), ExecutionConnectionError),
+    (("Timeout", "TimeoutError", "APITimeoutError", "TimeoutException"), ExecutionTimeoutError),
+    (("APIConnectionError", "ConnectionError", "NetworkError"), ExecutionConnectionError),
     (
         ("BadRequestError", "UnprocessableEntityError", "NotFoundError", "UnsupportedParamsError"),
         ExecutionBadRequestError,
