@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Execution: backend-neutral `ExecutionBackend.execute`, `ExecutionRequest`, `UsageRecord`, `CostReconciliation`, failure taxonomy, streaming/TTFT, and `AnalyticsFacade.select_and_execute`
 - Repository bootstrap: package skeleton, CLI skeleton, quality gates, CI
 - CLI commands: `--help`, `version`, `doctor`
 - Exception hierarchy: `ModelCompassError`, `ConfigurationError`, `DependencyError`

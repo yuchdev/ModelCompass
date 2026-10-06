@@ -156,7 +156,7 @@ async def test_facade_execute_records_only_normalized_usage():
     class Backend:
         """Execution backend double that returns a fixed successful result."""
 
-        async def complete(self, request: CompletionRequest) -> ExecutionResult:
+        async def execute(self, request: CompletionRequest) -> ExecutionResult:
             """Return a canned successful execution result for *request*."""
             return ExecutionResult(
                 model_id=request.model_id,
@@ -207,7 +207,7 @@ async def test_facade_execute_records_failed_latency_without_error_text():
     class Backend:
         """Execution backend double that always raises an execution error."""
 
-        async def complete(self, request: CompletionRequest) -> ExecutionResult:
+        async def execute(self, request: CompletionRequest) -> ExecutionResult:
             """Raise an execution error carrying a fixed latency for *request*."""
             del request
             raise ExecutionError("provider failure", latency_ms=4)
