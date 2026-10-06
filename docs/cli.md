@@ -61,6 +61,9 @@ freshness, and stored observation summary.
 `estimate` accepts exactly one prompt source: `--prompt TEXT`, `--prompt-file
 PATH`, explicit `--input-tokens`, or explicit `--stdin`. It never reads stdin
 implicitly. Give `--model ID` or `--filter TEXT` to choose one or more models.
+Capability requirements can further filter estimates with `--input-modality`,
+`--output-modality`, `--minimum-context`, `--require-tools`,
+`--require-structured-output`, and `--require-reasoning`.
 
 `compare` reports eligibility, estimates, ranking, and rejection reasons.
 `--allow-model`, `--block-model`, `--sort`, and `--limit` narrow or order the
@@ -83,7 +86,7 @@ Pareto defaults to quality maximization and cost minimization. Add repeatable
 
 ```bash
 model-compass observations stats --model openrouter:openai/gpt-4o-mini \
-  --task summarization --since 2026-01-01T00:00:00Z
+  --task summarization --since 2026-01-01T00:00:00Z --provider openai
 model-compass observations export --output observations.jsonl
 model-compass observations import observations.jsonl
 model-compass db status
@@ -111,6 +114,13 @@ model-compass benchmark export --run-id RUN_ID --output run.json
 The backward-compatible bare form `benchmark --dataset FILE --outputs FILE
 --model MODEL` evaluates saved outputs offline. Pass `--record` to store its
 quality evidence.
+
+The separate `run` command is also an explicit side effect. Supply
+`--stdin` to opt into reading a prompt from stdin:
+
+```bash
+printf 'Summarize this text' | model-compass run --model openai/model --stdin
+```
 
 ## Output and exit codes
 

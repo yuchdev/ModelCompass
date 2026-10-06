@@ -29,6 +29,7 @@ cli_module = importlib.import_module("model_compass.cli.app")
 
 
 def _profile() -> ModelProfile:
+    """Build a fixed, text-capable catalog profile for CLI tests."""
     now = datetime(2026, 1, 1, tzinfo=UTC)
     return ModelProfile(
         identity=ModelIdentity(
@@ -54,7 +55,7 @@ def _profile() -> ModelProfile:
 
 
 @pytest.mark.unit
-def test_help_exposes_requested_groups_and_commands() -> None:
+def test_help_exposes_requested_groups_and_commands():
     """[Unit] Verify generated help exposes the stable command tree.
 
     Scenario: Invoke root and group help through Typer's CliRunner.
@@ -79,7 +80,7 @@ def test_help_exposes_requested_groups_and_commands() -> None:
 
 
 @pytest.mark.unit
-def test_catalog_model_estimate_and_compare_json(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_catalog_model_estimate_and_compare_json(monkeypatch: pytest.MonkeyPatch):
     """[Unit] Exercise catalog, models, estimate, and compare JSON without network.
 
     Scenario: Use one normalized fake catalog profile for CLI commands.
@@ -109,6 +110,10 @@ def test_catalog_model_estimate_and_compare_json(monkeypatch: pytest.MonkeyPatch
             "10",
             "--expected-output-tokens",
             "10",
+            "--input-modality",
+            "text",
+            "--minimum-context",
+            "500",
             "--format",
             "json",
         ],
@@ -127,10 +132,12 @@ def test_catalog_model_estimate_and_compare_json(monkeypatch: pytest.MonkeyPatch
     )
     assert estimate.exit_code == 0
     assert json.loads(estimate.output)["estimates"][0]["input_tokens"] > 0
+    missing = runner.invoke(app, ["models", "show", "not-a-model", "--offline"])
+    assert missing.exit_code == 2
 
 
 @pytest.mark.unit
-def test_observation_benchmark_and_database_groups_use_configured_database(tmp_path: Path) -> None:
+def test_observation_benchmark_and_database_groups_use_configured_database(tmp_path: Path):
     """[Unit] Exercise local observation, benchmark, and database command groups.
 
     Scenario: Operate on a temporary SQLite store using only explicit file paths.
@@ -190,7 +197,7 @@ def test_observation_benchmark_and_database_groups_use_configured_database(tmp_p
 @pytest.mark.unit
 def test_config_paths_do_not_create_directories_and_empty_selection_has_exit_code_3(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+):
     """[Unit] Verify path overrides remain lazy and selection uses stable no-match code.
 
     Scenario: Invoke config paths with fresh paths and select with an empty catalog.
@@ -234,3 +241,35 @@ def test_config_paths_do_not_create_directories_and_empty_selection_has_exit_cod
     empty = runner.invoke(app, ["select", "--format", "json"])
     assert empty.exit_code == 3
     assert json.loads(empty.output)["selected"] is None
+
+
+@pytest.mark.unit
+def test_config_never_prints_credential_values_and_live_benchmark_requires_acknowledgement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """[Unit] Keep credentials hidden and require explicit live benchmark consent.
+
+    Scenario: Show config with a fake API key and attempt a benchmark without acknowledgement.
+    Boundaries: No provider calls or network access are made.
+    On failure, first check: environment key handling and the live-run guard.
+    """
+    secret = "test-secret-value"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    config = runner.invoke(app, ["config", "show", "--format", "json"])
+    assert config.exit_code == 0
+    assert secret not in config.output
+    assert "OPENAI_API_KEY" in config.output
+
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text(
+        '{"record_type":"dataset","name":"tiny","version":"1"}\n'
+        '{"record_type":"case","case_id":"one","task":"qa","input_text":"q",'
+        '"evaluator":"exact","expected_output":"a"}\n',
+        encoding="utf-8",
+    )
+    result = runner.invoke(
+        app,
+        ["benchmark", "run", "--dataset", str(dataset), "--model", "test:small"],
+    )
+    assert result.exit_code == 2
+    assert "acknowledge-live" in result.output

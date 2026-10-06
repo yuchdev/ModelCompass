@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum, IntEnum, StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, NoReturn, Optional
 
 import typer
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ from model_compass.benchmarks import (
 )
 from model_compass.catalogs import CatalogService, LiteLLMCatalogAdapter, OpenRouterCatalogAdapter
 from model_compass.config import AppPaths, default_paths
-from model_compass.domain import ModelProfile, RequestProfile
+from model_compass.domain import CatalogSnapshot, ModelProfile, RequestProfile
 from model_compass.exceptions import ModelCompassError, NoEligibleModelError, StorageError
 from model_compass.execution import CompletionRequest, LiteLLMBackend
 from model_compass.metrics import FallbackTokenEstimator, summarize_observations
@@ -40,6 +40,7 @@ from model_compass.selection import (
     ObjectiveDirection,
     ParetoObjective,
     SelectionPolicy,
+    check_eligibility,
     compare_models,
     estimate_request_cost,
     pareto_analysis,
@@ -88,7 +89,7 @@ def _root(
     db: Annotated[Optional[Path], typer.Option("--db", help="Observation database path")] = None,
     debug: Annotated[bool, typer.Option("--debug", help="Show tracebacks for command errors")] = False,
     no_color: Annotated[bool, typer.Option("--no-color", help="Disable colored output")] = False,
-) -> None:
+):
     """Configure paths and diagnostics for this invocation."""
     global console, err_console
     console = Console(no_color=no_color)
@@ -106,7 +107,7 @@ def _root(
 
 
 @app.command()
-def version() -> None:
+def version():
     """Print the installed package version."""
     print(__version__)
 
@@ -116,7 +117,7 @@ def doctor(
     output_format: Annotated[OutputFormat, typer.Option("--format", help="Output format: table or json")] = (
         OutputFormat.table
     ),
-) -> None:
+):
     """Report environment health and default paths."""
     paths = default_paths()
     try:
@@ -155,7 +156,7 @@ def doctor(
 def config_show(
     ctx: typer.Context,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Show the effective configuration paths and recognized environment keys."""
     paths = _effective_paths(ctx)
     options = ctx.obj
@@ -185,7 +186,7 @@ def config_show(
 def config_paths(
     ctx: typer.Context,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Print effective application paths without creating directories."""
     payload = {"schema_version": 1, "command": "config paths", "paths": _path_data(_effective_paths(ctx))}
     if output_format == OutputFormat.json:
@@ -206,7 +207,7 @@ def catalog_refresh(
     force: Annotated[bool, typer.Option(help="Ignore fresh cached catalog data")] = False,
     offline: Annotated[bool, typer.Option(help="Require cached OpenRouter data")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Refresh catalog metadata and report source freshness and warnings."""
     try:
         snapshot, source_name = _refresh_catalog(ctx, source=source, force=force, offline=offline)
@@ -238,7 +239,7 @@ def catalog_sources(
     ctx: typer.Context,
     offline: Annotated[bool, typer.Option(help="Use cached OpenRouter data only")] = True,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """List catalog sources present in a snapshot."""
     try:
         snapshot, _ = _refresh_catalog(ctx, source="all", offline=offline)
@@ -263,7 +264,7 @@ def catalog_status(
     ctx: typer.Context,
     offline: Annotated[bool, typer.Option(help="Do not fetch a fresh catalog")] = True,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Show the current catalog snapshot status."""
     try:
         snapshot, source_name = _refresh_catalog(ctx, source="all", offline=offline)
@@ -293,7 +294,7 @@ def models_callback(
     ctx: typer.Context,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
-) -> None:
+):
     """List catalog models, or use ``models list`` and ``models show``."""
     if ctx.invoked_subcommand is None:
         _models_list(ctx, output_format=output_format, offline=offline)
@@ -316,7 +317,7 @@ def models_list(
     limit: Annotated[Optional[int], typer.Option(min=1)] = None,
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """List normalized models with capability, source, and price filters."""
     _models_list(
         ctx,
@@ -341,7 +342,7 @@ def models_show(
     model: Annotated[str, typer.Argument(help="Canonical or provider-local model ID")],
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Show complete normalized details for one model."""
     try:
         snapshot, _ = _refresh_catalog(ctx, source="all", offline=offline)
@@ -350,13 +351,15 @@ def models_show(
             _fail(
                 ctx, f"Model {model!r} was not found.", 2, hint="Run `model-compass models list` to see available IDs."
             )
-        observation_summary = None
-        try:
-            observation_summary = _analytics(ctx).summarize_model(profile.identity.canonical_id, min_samples=1)
-        except (AttributeError, ModelCompassError):
-            pass
     except ModelCompassError as exc:
         _fail(ctx, f"Unable to load model: {exc}", 4)
+    observation_summary = None
+    summary_method = getattr(_analytics(ctx), "summarize_model", None)
+    if summary_method is not None:
+        try:
+            observation_summary = summary_method(profile.identity.canonical_id, min_samples=1)
+        except ModelCompassError as exc:
+            _fail(ctx, f"Unable to read model observations: {exc}", 6)
     payload = {
         "schema_version": 1,
         "command": "models show",
@@ -396,9 +399,15 @@ def estimate(
     expected_output_tokens: Annotated[
         Optional[int], typer.Option("--expected-output-tokens", "--output-tokens", min=0)
     ] = None,
+    input_modality: Annotated[Optional[list[str]], typer.Option("--input-modality")] = None,
+    output_modality: Annotated[Optional[list[str]], typer.Option("--output-modality")] = None,
+    minimum_context: Annotated[Optional[int], typer.Option("--minimum-context", min=0)] = None,
+    requires_tools: Annotated[bool, typer.Option("--require-tools")] = False,
+    requires_structured_output: Annotated[bool, typer.Option("--require-structured-output")] = False,
+    requires_reasoning: Annotated[bool, typer.Option("--require-reasoning")] = False,
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Estimate per-component request cost for one or more catalog models."""
     modes = sum(value is not None for value in (prompt, prompt_file, input_tokens)) + int(stdin)
     if modes != 1:
@@ -432,6 +441,15 @@ def estimate(
             ]
         else:
             _fail(ctx, "Specify --model or --filter.", 2)
+        requirement_profile = RequestProfile(
+            input_modalities=frozenset(input_modality or ()),
+            output_modalities=frozenset(output_modality or ()),
+            minimum_context=minimum_context,
+            requires_tools=True if requires_tools else None,
+            requires_structured_output=True if requires_structured_output else None,
+            requires_reasoning=True if requires_reasoning else None,
+        )
+        profiles = [item for item in profiles if check_eligibility(item, requirement_profile).eligible]
         rows = []
         estimator = FallbackTokenEstimator()
         for profile in sorted(profiles, key=lambda item: item.identity.canonical_id):
@@ -514,7 +532,7 @@ def compare(
     limit: Annotated[Optional[int], typer.Option(min=1)] = None,
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Compare model eligibility, request cost, evidence, and ranking."""
     try:
         policy = SelectionPolicy(sort)
@@ -594,7 +612,7 @@ def select(
     block_model: Annotated[Optional[list[str]], typer.Option("--block-model")] = None,
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Select an eligible model without executing it."""
     try:
         request = _request(
@@ -682,7 +700,7 @@ def pareto(
     ] = False,
     offline: Annotated[bool, typer.Option(help="Use cached catalog data only")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Show a Pareto frontier for quality, cost, latency, and reliability."""
     try:
         selected_objectives = _pareto_objectives(objective, objectives)
@@ -737,7 +755,7 @@ def observations_callback(
     task: Annotated[Optional[str], typer.Option(help="Filter by exact task label")] = None,
     model_id: Annotated[Optional[str], typer.Option("--model", help="Filter by model ID")] = None,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Inspect, summarize, export, or import recorded observations."""
     if ctx.invoked_subcommand is None:
         _observations_list(ctx, task=task, model_id=model_id, output_format=output_format)
@@ -752,7 +770,7 @@ def observations_stats(
     gateway: Annotated[Optional[str], typer.Option(help="Filter by gateway/provider substring")] = None,
     provider: Annotated[Optional[str], typer.Option(help="Filter by provider substring")] = None,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Summarize observations and report the exact sample count."""
     try:
         since_dt = _parse_datetime(since) if since else None
@@ -786,7 +804,7 @@ def observations_stats(
 def observations_export(
     ctx: typer.Context,
     output: Annotated[Path, typer.Option("--output", help="Destination JSONL path")],
-) -> None:
+):
     """Export observations and benchmark results in the stable JSONL format."""
     try:
         output.write_text(_store(ctx).export_jsonl(), encoding="utf-8")
@@ -800,7 +818,7 @@ def observations_import(
     ctx: typer.Context,
     source: Annotated[Path, typer.Argument(exists=True, dir_okay=False, readable=True)],
     deduplicate: Annotated[bool, typer.Option(help="Skip records already present in the database")] = False,
-) -> None:
+):
     """Validate and import records from a JSONL file."""
     try:
         content = source.read_text(encoding="utf-8")
@@ -818,7 +836,7 @@ def benchmark_callback(
     model: Annotated[Optional[str], typer.Option("--model")] = None,
     record: Annotated[bool, typer.Option(help="Persist offline evaluation as quality evidence")] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Run, inspect, and export benchmarks; bare ``benchmark`` scores saved outputs."""
     if ctx.invoked_subcommand is None and dataset and outputs and model:
         _benchmark_offline(ctx, dataset, outputs, model, record=record, output_format=output_format)
@@ -842,7 +860,7 @@ def benchmark_run(
         ),
     ] = False,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Run a live benchmark against providers (explicit acknowledgement required)."""
     if not acknowledge_live:
         _fail(ctx, "Live benchmark not started.", 2, hint="Pass --acknowledge-live to permit billable model requests.")
@@ -893,7 +911,7 @@ def benchmark_run(
 def benchmark_list(
     ctx: typer.Context,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """List stored benchmark runs."""
     try:
         runs = _store(ctx).query_benchmark_runs()
@@ -919,7 +937,7 @@ def benchmark_show(
     ctx: typer.Context,
     run_id: Annotated[str, typer.Argument(help="Stored benchmark run ID")],
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Show one stored run and its per-case results."""
     try:
         store = _store(ctx)
@@ -950,7 +968,7 @@ def benchmark_export(
     ctx: typer.Context,
     run_id: Annotated[str, typer.Option("--run-id")],
     output: Annotated[Path, typer.Option("--output")],
-) -> None:
+):
     """Export a stored benchmark run and its results as versioned JSON."""
     try:
         store = _store(ctx)
@@ -983,7 +1001,7 @@ def benchmark_export(
 def db_status(
     ctx: typer.Context,
     output_format: Annotated[OutputFormat, typer.Option("--format")] = OutputFormat.table,
-) -> None:
+):
     """Report the configured database path without creating it."""
     path = _db_path(ctx)
     payload = {
@@ -1003,7 +1021,7 @@ def db_status(
 
 
 @db_app.command("vacuum")
-def db_vacuum(ctx: typer.Context) -> None:
+def db_vacuum(ctx: typer.Context):
     """Reclaim unused space in the configured SQLite database."""
     try:
         _store(ctx).vacuum()
@@ -1017,8 +1035,8 @@ def run(
     ctx: typer.Context,
     model_id: Annotated[str, typer.Option("--model", help="LiteLLM model identifier")],
     task: Annotated[str, typer.Option(help="Task label for recorded observations")] = "general",
-    stdin: Annotated[bool, typer.Option("--stdin", help="Explicitly read the prompt from stdin")] = True,
-) -> None:
+    stdin: Annotated[bool, typer.Option("--stdin", help="Explicitly read the prompt from stdin")] = False,
+):
     """Execute one request and record aggregate usage; prompt input is explicit."""
     if not stdin:
         _fail(ctx, "A prompt source is required.", 2, hint="Pass --stdin and pipe or enter prompt text.")
@@ -1059,7 +1077,8 @@ def _models_list(
     limit: Optional[int] = None,
     offline: bool = False,
     output_format: OutputFormat = OutputFormat.table,
-) -> None:
+):
+    """Filter normalized catalog profiles and render compact model rows."""
     try:
         snapshot, _ = _refresh_catalog(ctx, source="all", offline=offline)
     except ModelCompassError as exc:
@@ -1143,7 +1162,8 @@ def _observations_list(
     task: Optional[str],
     model_id: Optional[str],
     output_format: OutputFormat,
-) -> None:
+):
+    """List aggregate execution observations in the selected output format."""
     try:
         records = _analytics(ctx).list_observations(model_id=model_id, task=task)
     except ModelCompassError as exc:
@@ -1178,7 +1198,8 @@ def _benchmark_offline(
     *,
     record: bool,
     output_format: OutputFormat,
-) -> None:
+):
+    """Evaluate saved benchmark outputs without invoking a model."""
     try:
         dataset_model = load_dataset_jsonl(dataset.read_text(encoding="utf-8"))
         output_payload = json.loads(outputs.read_text(encoding="utf-8"))
@@ -1203,7 +1224,10 @@ def _benchmark_offline(
     _emit(payload, output_format, table)
 
 
-def _refresh_catalog(ctx: typer.Context, *, source: str, force: bool = False, offline: bool = False):
+def _refresh_catalog(
+    ctx: typer.Context, *, source: str, force: bool = False, offline: bool = False
+) -> tuple[CatalogSnapshot, str]:
+    """Refresh a selected catalog source through the catalog service."""
     if source not in {"all", "openrouter", "litellm"}:
         raise ValueError("source must be openrouter, litellm, or all")
     service = _analytics(ctx).catalog
@@ -1215,6 +1239,7 @@ def _refresh_catalog(ctx: typer.Context, *, source: str, force: bool = False, of
 
 
 def _analytics(ctx: typer.Context) -> Any:
+    """Return the analytics facade configured for this CLI invocation."""
     options = ctx.find_root().obj
     if options["analytics"] is not None:
         return options["analytics"]
@@ -1231,6 +1256,7 @@ def _analytics(ctx: typer.Context) -> Any:
 
 
 def _store(ctx: typer.Context) -> SQLiteObservationStore:
+    """Return the lazily initialized store for the selected database path."""
     options = ctx.find_root().obj
     if options["store"] is None:
         options["store"] = SQLiteObservationStore(_db_path(ctx))
@@ -1238,6 +1264,7 @@ def _store(ctx: typer.Context) -> SQLiteObservationStore:
 
 
 def _db_path(ctx: typer.Context) -> Path:
+    """Resolve the configured or platform-default SQLite database path."""
     options = ctx.find_root().obj
     if options["db"] is not None:
         return options["db"]
@@ -1246,6 +1273,7 @@ def _db_path(ctx: typer.Context) -> Path:
 
 
 def _effective_paths(ctx: typer.Context) -> AppPaths:
+    """Resolve path overrides without creating data or cache directories."""
     options = ctx.find_root().obj
     defaults = default_paths()
     data_dir = options["data_dir"] or defaults.data_dir
@@ -1257,6 +1285,7 @@ def _effective_paths(ctx: typer.Context) -> AppPaths:
 
 
 def _path_data(paths: AppPaths) -> dict[str, str]:
+    """Convert effective paths to their public display and JSON representation."""
     return {
         "config_dir": str(paths.config_dir),
         "data_dir": str(paths.data_dir),
@@ -1280,6 +1309,7 @@ def _request(
     max_latency_ms: Optional[int],
     min_reliability: Optional[Decimal],
 ) -> RequestProfile:
+    """Build a validated request profile from CLI options."""
     return RequestProfile(
         task=task,
         explicit_input_tokens=input_tokens,
@@ -1301,6 +1331,7 @@ def _pareto_objectives(
     values: Optional[list[str]],
     legacy_values: Optional[str] = None,
 ) -> dict[ParetoObjective, ObjectiveDirection]:
+    """Parse directional Pareto objectives or legacy dimension names."""
     if legacy_values is not None:
         values = []
         for item in legacy_values.split(","):
@@ -1328,6 +1359,7 @@ def _model_inclusion(
     included: Optional[list[str]],
     excluded: Optional[list[str]],
 ) -> list[ModelProfile]:
+    """Apply explicit model allow and block lists."""
     include_values = {value.casefold() for value in included or ()}
     exclude_values = {value.casefold() for value in excluded or ()}
     return [
@@ -1339,6 +1371,7 @@ def _model_inclusion(
 
 
 def _model_list_row(profile: ModelProfile) -> dict[str, Any]:
+    """Convert a profile to compact model-list output."""
     capabilities = profile.capabilities
     modalities = sorted(set(capabilities.input_modalities + capabilities.output_modalities))
     return {
@@ -1355,6 +1388,7 @@ def _model_list_row(profile: ModelProfile) -> dict[str, Any]:
 
 
 def _catalog_table(snapshot: Any) -> Table:
+    """Build a compact catalog status table."""
     table = Table(title="Catalog refresh")
     table.add_column("Property", style="bold")
     table.add_column("Value")
@@ -1365,17 +1399,20 @@ def _catalog_table(snapshot: Any) -> Table:
 
 
 def _known_free(profile: ModelProfile) -> bool:
+    """Return whether known input and output token prices are both zero."""
     input_price = profile.pricing.components.get("prompt")
     output_price = profile.pricing.components.get("completion")
     return input_price is not None and output_price is not None and input_price.amount == 0 and output_price.amount == 0
 
 
 def _price(profile: ModelProfile, key: str) -> str:
+    """Format a normalized price or return ``unknown``."""
     component = profile.pricing.components.get(key)
     return str(component.amount) if component is not None else "unknown"
 
 
 def _format_prices(profile: ModelProfile) -> str:
+    """Format every normalized price component for detailed model output."""
     components = profile.pricing.effective_components()
     return (
         ", ".join(f"{key}={value.amount} {value.currency}/{value.unit}" for key, value in sorted(components.items()))
@@ -1384,6 +1421,7 @@ def _format_prices(profile: ModelProfile) -> str:
 
 
 def _find_profile(profiles: Iterable[ModelProfile], requested_id: str) -> Optional[ModelProfile]:
+    """Find a profile by canonical or provider-local ID, case-insensitively."""
     lowered = requested_id.strip().casefold()
     return next(
         (
@@ -1396,6 +1434,7 @@ def _find_profile(profiles: Iterable[ModelProfile], requested_id: str) -> Option
 
 
 def _parse_decimal_option(value: Optional[str], option_name: str) -> Optional[Decimal]:
+    """Parse a finite decimal CLI value without binary floating-point conversion."""
     if value is None:
         return None
     try:
@@ -1408,6 +1447,7 @@ def _parse_decimal_option(value: Optional[str], option_name: str) -> Optional[De
 
 
 def _parse_datetime(value: str) -> datetime:
+    """Parse an ISO-8601 timestamp and require an explicit timezone."""
     try:
         result = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -1417,18 +1457,21 @@ def _parse_datetime(value: str) -> datetime:
     return result.astimezone(UTC)
 
 
-def _emit(payload: Mapping[str, Any], output_format: OutputFormat, table: Table) -> None:
+def _emit(payload: Mapping[str, Any], output_format: OutputFormat, table: Table):
+    """Render structured JSON or its corresponding Rich table."""
     if output_format == OutputFormat.json:
         _print_json(payload)
     else:
         console.print(table)
 
 
-def _print_json(payload: Mapping[str, Any]) -> None:
+def _print_json(payload: Mapping[str, Any]):
+    """Print JSON without Rich markup processing."""
     print(json.dumps(_json_value(payload), indent=2, sort_keys=True, ensure_ascii=False))
 
 
 def _json_value(value: Any) -> Any:
+    """Recursively encode Pydantic and standard-library values as JSON-safe data."""
     if isinstance(value, BaseModel):
         return _json_value(value.model_dump(mode="python"))
     if isinstance(value, Decimal):
@@ -1452,7 +1495,8 @@ def _fail(
     code: int,
     *,
     hint: Optional[str] = None,
-) -> None:
+) -> NoReturn:
+    """Print a concise diagnostic and exit with a stable CLI code."""
     try:
         exit_code = ExitCode(code)
     except ValueError:
@@ -1466,6 +1510,7 @@ def _fail(
 
 
 def _format_datetime(value: Optional[datetime]) -> str:
+    """Format an optional datetime as UTC ISO-8601."""
     if value is None:
         return "unknown"
     normalized = value.astimezone(UTC)
@@ -1473,6 +1518,7 @@ def _format_datetime(value: Optional[datetime]) -> str:
 
 
 def _format_age(value: datetime) -> str:
+    """Format the elapsed age of catalog data."""
     seconds = max(0, int((datetime.now(UTC) - value).total_seconds()))
     if seconds < 60:
         return f"{seconds}s"
@@ -1482,6 +1528,7 @@ def _format_age(value: datetime) -> str:
 
 
 def _unknown(value: Any) -> str:
+    """Render missing measurements as ``unknown`` instead of zero."""
     return str(value) if value is not None else "unknown"
 
 
