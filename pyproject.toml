@@ -91,11 +91,11 @@ exclude_lines = [
 ]
 
 [tool.flakeforge]
-include = ["src", "tests"]
-# exclude = []
+include = ["src", "tests", "scripts"]
+exclude = []
 
-# select = []
-# ignore = []
+#select = []
+#ignore = []
 
 # Pre-existing violations accepted at migration time (the plugin was never
 # actually wired into Flake8 before, so these were invisible until now).
@@ -108,8 +108,8 @@ allow_noqa = true
 
 # Whitelist: when non-empty, only files/directories listed here may use `# noqa`.
 # When empty, all files not in `noqa_forbidden` are permitted.
-# noqa_allowed = []
+noqa_allowed = []
 
 # Blacklist: files/directories where `# noqa` is strictly forbidden (violations always fire).
 # Blacklist always wins over `noqa_allowed`.
-# noqa_forbidden = []
+noqa_forbidden = []

@@ -41,6 +41,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -192,7 +193,7 @@ def resolve_mention(
     source_rel: str,
     by_path: dict[str, str],
     by_name: dict[str, list[str]],
-) -> tuple[str | None, str]:
+) -> tuple[Optional[str], str]:
     """Resolve a bare mention to an absolute registry path, or explain failure.
 
     :param mention: the text as found in the source (e.g. ``"plan.md"`` or
@@ -341,7 +342,7 @@ def process_file(
     new_lines: list[str] = []
     all_unresolvable: list[dict[str, object]] = []
     in_fence = False
-    fence_marker: str | None = None
+    fence_marker: Optional[str] = None
     changed = False
 
     for lineno, raw in enumerate(lines, 1):
@@ -387,7 +388,7 @@ def process_file(
 def write_report(
     unresolvable: list[dict[str, object]],
     report_path: Path,
-) -> None:
+):
     """Write an actionable review report for unresolvable mentions.
 
     :param unresolvable: list of unresolvable entry dicts from
@@ -453,7 +454,7 @@ def iter_targets(paths: list[Path]) -> list[Path]:
     return sorted(found)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     """Entry point.
 
     :return: exit code (0 = all resolved, 1 = unresolvable items remain).
@@ -530,4 +531,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())
