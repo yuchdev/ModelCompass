@@ -104,6 +104,7 @@ class LiteLLMBackend:
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
         """Call LiteLLM and normalize its response or failure."""
+        request = ExecutionRequest.model_validate(request.model_dump())
         completion_call = self._completion_call or _get_completion_call()
         model = self._model_resolver(request.model_id) if self._model_resolver else request.model_id
         kwargs = self._build_kwargs(request, model)
@@ -113,7 +114,7 @@ class LiteLLMBackend:
         try:
             response = await completion_call(**kwargs)
         except _failure_types() as exc:
-            raise classify_exception(exc, latency_ms=_elapsed_ms(start)) from exc
+            raise classify_exception(exc, latency_ms=_elapsed_ms(start)) from None
         latency_ms = _elapsed_ms(start)
         try:
             return self._normalize(request, model, response, latency_ms=latency_ms)
@@ -135,6 +136,8 @@ class LiteLLMBackend:
             kwargs["tools"] = request.tools
         if request.response_format is not None:
             kwargs["response_format"] = request.response_format
+        if request.metadata:
+            kwargs["metadata"] = request.metadata
         if request.provider_routing:
             kwargs["extra_body"] = {**dict(kwargs.get("extra_body") or {}), "provider": request.provider_routing}
         if request.stream:
@@ -165,27 +168,54 @@ class LiteLLMBackend:
         ttft_ms: Optional[int] = None
         try:
             stream = await completion_call(**kwargs)
+        except _failure_types() as exc:
+            raise classify_exception(exc, latency_ms=_elapsed_ms(start)) from None
+        try:
             async for chunk in stream:
-                choices = _get(chunk, "choices", None) or []
-                delta = _get(choices[0], "delta", None) if choices else None
-                content = _get(delta, "content", None)
-                fragments = _get(delta, "tool_calls", None) or []
-                if ttft_ms is None and ((isinstance(content, str) and content) or fragments):
-                    ttft_ms = _elapsed_ms(start)
-                if isinstance(content, str) and content:
-                    text_parts.append(content)
-                    if self._on_text_delta is not None:
-                        self._on_text_delta(content)
-                for fragment in fragments:
-                    _merge_tool_fragment(tool_fragments, fragment)
-                if choices and _get(choices[0], "finish_reason", None):
-                    finish_reason = str(_get(choices[0], "finish_reason", None))
-                chunk_usage = _get(chunk, "usage", None)
-                if chunk_usage is not None:
-                    usage = chunk_usage
-                chunk_hidden = _get(chunk, "_hidden_params", None)
-                if chunk_hidden:
-                    hidden = chunk_hidden
+                try:
+                    raw_choices = _get(chunk, "choices", None)
+                    if raw_choices is not None and not isinstance(raw_choices, (list, tuple)):
+                        raise TypeError("stream choices must be a sequence")
+                    choices = raw_choices or []
+                    delta = _get(choices[0], "delta", None) if choices else None
+                    content = _get(delta, "content", None)
+                    raw_fragments = _get(delta, "tool_calls", None)
+                    if raw_fragments is not None and not isinstance(raw_fragments, (list, tuple)):
+                        raise TypeError("stream tool_calls must be a sequence")
+                    fragments = raw_fragments or []
+                    if ttft_ms is None and ((isinstance(content, str) and content) or fragments):
+                        ttft_ms = _elapsed_ms(start)
+                    if isinstance(content, str) and content:
+                        text_parts.append(content)
+                        if self._on_text_delta is not None:
+                            self._on_text_delta(content)
+                    for fragment in fragments:
+                        _merge_tool_fragment(tool_fragments, fragment)
+                    if choices and _get(choices[0], "finish_reason", None):
+                        finish_reason = str(_get(choices[0], "finish_reason", None))
+                    chunk_usage = _get(chunk, "usage", None)
+                    if chunk_usage is not None:
+                        usage = chunk_usage
+                    chunk_hidden = _get(chunk, "_hidden_params", None)
+                    if chunk_hidden:
+                        hidden = chunk_hidden
+                except ExecutionError:
+                    raise
+                except _NORMALIZATION_ERRORS as exc:
+                    raise MalformedResponseError(
+                        f"LiteLLM stream returned a malformed chunk ({type(exc).__name__})"
+                    ) from None
+        except MalformedResponseError as exc:
+            if text_parts or tool_fragments:
+                raise PartialOutputError(
+                    f"LiteLLM stream returned a malformed response ({type(exc).__name__})",
+                    partial_output="".join(text_parts),
+                    latency_ms=_elapsed_ms(start),
+                    time_to_first_token_ms=ttft_ms,
+                ) from None
+            exc.latency_ms = _elapsed_ms(start)
+            exc.time_to_first_token_ms = ttft_ms
+            raise
         except _failure_types() as exc:
             latency_ms = _elapsed_ms(start)
             if text_parts or tool_fragments:
@@ -194,23 +224,49 @@ class LiteLLMBackend:
                     partial_output="".join(text_parts),
                     latency_ms=latency_ms,
                     time_to_first_token_ms=ttft_ms,
-                ) from exc
+                ) from None
             error = classify_exception(exc, latency_ms=latency_ms)
             error.time_to_first_token_ms = ttft_ms
-            raise error from exc
+            raise error from None
         latency_ms = _elapsed_ms(start)
-        return self._build_result(
-            request,
-            model,
-            output_text="".join(text_parts),
-            tool_calls=[tool_fragments[index] for index in sorted(tool_fragments)],
-            finish_reason=finish_reason,
-            usage=usage,
-            hidden=hidden,
-            latency_ms=latency_ms,
-            ttft_ms=ttft_ms,
-            streamed=True,
-        )
+        try:
+            return self._build_result(
+                request,
+                model,
+                output_text="".join(text_parts),
+                tool_calls=[tool_fragments[index] for index in sorted(tool_fragments)],
+                finish_reason=finish_reason,
+                usage=usage,
+                hidden=hidden,
+                latency_ms=latency_ms,
+                ttft_ms=ttft_ms,
+                streamed=True,
+            )
+        except ExecutionError as exc:
+            if isinstance(exc, MalformedResponseError) and (text_parts or tool_fragments):
+                raise PartialOutputError(
+                    f"LiteLLM stream returned a malformed response ({type(exc).__name__})",
+                    partial_output="".join(text_parts),
+                    latency_ms=latency_ms,
+                    time_to_first_token_ms=ttft_ms,
+                ) from None
+            exc.latency_ms = latency_ms
+            exc.time_to_first_token_ms = ttft_ms
+            raise
+        except _NORMALIZATION_ERRORS as exc:
+            error_message = f"LiteLLM stream returned a malformed response ({type(exc).__name__})"
+            if text_parts or tool_fragments:
+                raise PartialOutputError(
+                    error_message,
+                    partial_output="".join(text_parts),
+                    latency_ms=latency_ms,
+                    time_to_first_token_ms=ttft_ms,
+                ) from None
+            raise MalformedResponseError(
+                error_message,
+                latency_ms=latency_ms,
+                time_to_first_token_ms=ttft_ms,
+            ) from None
 
     def _normalize(self, request: ExecutionRequest, model: str, response: Any, *, latency_ms: int) -> ExecutionResult:
         """Normalize a non-streaming LiteLLM response."""

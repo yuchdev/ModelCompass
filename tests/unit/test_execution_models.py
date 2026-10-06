@@ -64,6 +64,7 @@ def test_request_defaults_and_from_prompt():
         {"parameters": {"openai_api_key": "abc"}},
         {"provider_routing": {"password": "abc"}},
         {"tools": [{"type": "function", "access_token": "abc"}]},
+        {"metadata": {"api_key": "abc"}},
     ],
 )
 def test_request_rejects_credentials(overrides: dict[str, object]):

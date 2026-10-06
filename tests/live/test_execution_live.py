@@ -34,7 +34,9 @@ async def test_live_execution_records_observation_in_temp_db(tmp_path: Path):
         model, "live-smoke", "Reply with the single word: ok", parameters={"max_tokens": max_tokens}
     )
     worst_case = _worst_case_cost_usd(model, max_tokens)
-    if worst_case is not None and worst_case > ceiling:
+    if worst_case is None:
+        pytest.skip(f"Cannot determine worst-case cost for {model!r}; refusing an unguarded live request")
+    if worst_case > ceiling:
         pytest.skip(f"Worst-case cost {worst_case} exceeds MODEL_ANALYTICS_LIVE_MAX_COST_USD={ceiling}")
 
     result = await backend.execute(request)
@@ -58,3 +60,25 @@ def _worst_case_cost_usd(model: str, max_tokens: int) -> Optional[Decimal]:
     return (
         Decimal(str(prices["input_cost_per_token"])) * 50 + Decimal(str(prices["output_cost_per_token"])) * max_tokens
     )
+
+
+@pytest.mark.unit
+async def test_live_execution_skips_when_price_is_unavailable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """[Unit] live cost guard: unknown pricing skips before the backend can send a billable request.
+
+    Scenario: Enable the live test with a model whose preflight cost cannot be determined.
+    Boundaries: LiteLLM pricing and backend execution are monkeypatched; no network or credentials.
+    On failure, first check: the live test's preflight skip for unknown pricing.
+    """
+    monkeypatch.setenv("MODEL_ANALYTICS_LIVE_LLM", "1")
+    monkeypatch.setenv("MODEL_ANALYTICS_LIVE_MODEL", "unpriced-model")
+    monkeypatch.setattr(litellm, "model_cost", {})
+
+    async def unexpected_execution(self: LiteLLMBackend, request: ExecutionRequest):
+        """Fail if the safety guard allows execution."""
+        del self, request
+        raise AssertionError("execution must not start without a known cost")
+
+    monkeypatch.setattr(LiteLLMBackend, "execute", unexpected_execution)
+    with pytest.raises(pytest.skip.Exception, match="Cannot determine worst-case cost"):
+        await test_live_execution_records_observation_in_temp_db(tmp_path)

@@ -86,7 +86,7 @@ class ExecutionRequest(BaseModel):
             raise ValueError(f"{found!r} would enable implicit multi-model fallback, which is not supported")
         return value
 
-    @field_validator("parameters", "provider_routing", "tools", "response_format")
+    @field_validator("parameters", "provider_routing", "tools", "response_format", "metadata")
     @classmethod
     def _no_credentials(cls, value: Any) -> Any:
         """Reject credential-looking keys so secrets never ride in serializable requests."""

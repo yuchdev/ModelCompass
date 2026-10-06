@@ -133,12 +133,14 @@ async def test_select_execute_record_and_reconcile_with_sqlite(tmp_path: Path):
     assert outcome.reconciliation.absolute_error == Decimal("0.0002")
     assert outcome.reconciliation.relative_error == Decimal("0.0002") / Decimal("0.0018")
     assert outcome.reconciliation.actual_source == "provider_reported"
+    assert litellm_double.calls[0]["metadata"] == {"run": "r1"}
 
     [stored] = store.query_observations(model_id="test:cheap")
     assert stored.observation_id == outcome.observation_id
     assert stored.success is True
     assert stored.estimated_cost == Decimal("0.002")
     assert stored.actual_cost == Decimal("0.0018")
+    assert "run" not in stored.metadata
     assert (stored.input_tokens, stored.output_tokens) == (1000, 400)
     assert Decimal(stored.metadata["cost_reconciliation"]["absolute_error"]) == Decimal("0.0002")
     assert stored.prompt is None
@@ -284,6 +286,28 @@ async def test_no_eligible_model_raises_before_executing():
             execution_request=_execution_request(),
             backend=backend,
             minimum_context=10_000_000,
+            now_utc=_NOW,
+        )
+    assert backend.calls == []
+    assert store.query_observations() == []
+
+
+@pytest.mark.integration
+async def test_mismatched_tasks_are_rejected_before_selection_or_execution():
+    """[Integration] task consistency: selection and persisted execution labels must agree.
+
+    Scenario: The request profile and execution DTO carry different task labels.
+    Boundaries: Real facade and in-memory store; the backend is a local fake, no I/O.
+    On failure, first check: AnalyticsFacade.select_and_execute task validation.
+    """
+    backend = FakeExecutionBackend()
+    store = InMemoryObservationStore()
+    with pytest.raises(ValueError, match="effective request task must match execution_request.task"):
+        await AnalyticsFacade(observation_store=store).select_and_execute(
+            profiles=_PROFILES,
+            request_profile=_REQUEST_PROFILE,
+            execution_request=_execution_request(task="summarization"),
+            backend=backend,
             now_utc=_NOW,
         )
     assert backend.calls == []

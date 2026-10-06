@@ -196,6 +196,9 @@ class AnalyticsFacade:
         (default: the same store). Pass ``NullObservationSink()`` to execute without persisting.
         A failed execution is recorded too, then re-raised with ``observation_id`` attached.
         """
+        selection_task = request_profile.task or "general"
+        if selection_task != execution_request.task:
+            raise ValueError("the effective request task must match execution_request.task")
         selection = self.select(
             profiles,
             request_profile,

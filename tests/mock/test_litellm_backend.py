@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import traceback
 from collections.abc import AsyncIterator
 from decimal import Decimal
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from typing import Any, Optional
 
 import litellm
 import pytest
+from pydantic import ValidationError
 
 from model_compass.exceptions import ConfigurationError, DependencyError
 from model_compass.execution import (
@@ -316,6 +318,8 @@ async def test_provider_exceptions_map_to_project_errors(error: Exception, expec
     assert raised.value.latency_ms is not None
     assert SECRET not in str(raised.value)
     assert SECRET not in repr(raised.value)
+    assert raised.value.__cause__ is None
+    assert SECRET not in "".join(traceback.format_exception(raised.value))
 
 
 @pytest.mark.mock
@@ -398,6 +402,7 @@ async def test_request_options_are_forwarded_to_litellm():
         response_format=response_format,
         parameters={"temperature": 0, "max_tokens": 9, "extra_body": {"transforms": ["x"]}},
         provider_routing={"order": ["acme"], "allow_fallbacks": False},
+        metadata={"trace_id": "trace-1"},
     )
     await LiteLLMBackend(completion_call=recorder, api_key=SECRET, max_retries=2).execute(request)
     sent = recorder.calls[0]
@@ -408,7 +413,32 @@ async def test_request_options_are_forwarded_to_litellm():
     assert sent["extra_body"] == {"transforms": ["x"], "provider": {"order": ["acme"], "allow_fallbacks": False}}
     assert sent["num_retries"] == 2
     assert sent["api_key"] == SECRET
+    assert sent["metadata"] == {"trace_id": "trace-1"}
     assert "stream" not in sent
+
+
+@pytest.mark.mock
+@pytest.mark.parametrize(
+    ("field", "invalid_data"),
+    [
+        ("parameters", {"api_key": SECRET}),
+        ("parameters", {"fallbacks": ["other"]}),
+        ("metadata", {"api_key": SECRET}),
+    ],
+)
+async def test_mutated_request_data_is_revalidated_before_execution(field: str, invalid_data: dict[str, Any]):
+    """[Local] request boundary: nested mutations cannot bypass credential or fallback checks.
+
+    Scenario: Mutate a frozen request's nested mapping after construction, then execute it.
+    Boundaries: Real LiteLLMBackend with a recording completion double; no network.
+    On failure, first check: execute's request revalidation before call construction.
+    """
+    recorder = Recorder(_response())
+    request = _request()
+    getattr(request, field).update(invalid_data)
+    with pytest.raises(ValidationError):
+        await LiteLLMBackend(completion_call=recorder).execute(request)
+    assert recorder.calls == []
 
 
 @pytest.mark.mock
@@ -570,6 +600,51 @@ async def test_stream_error_after_output_is_partial():
     assert raised.value.time_to_first_token_ms is not None
     assert raised.value.latency_ms is not None
     assert SECRET not in str(raised.value)
+    assert raised.value.__cause__ is None
+    assert SECRET not in "".join(traceback.format_exception(raised.value))
+
+
+@pytest.mark.mock
+@pytest.mark.parametrize("with_output", [False, True])
+async def test_malformed_stream_chunk_uses_project_error(with_output: bool):
+    """[Local] malformed streaming: bad tool fragments become a sanitized malformed or partial-output error.
+
+    Scenario: A chunk has a malformed choices payload, before or after streamed text.
+    Boundaries: Real LiteLLMBackend and an in-memory stream double; no network.
+    On failure, first check: _execute_stream malformed-chunk normalization.
+    """
+    chunks = [_chunk("partial")] if with_output else []
+    chunks.append({"choices": "not-a-sequence"})
+    expected = PartialOutputError if with_output else MalformedResponseError
+    with pytest.raises(expected) as raised:
+        await LiteLLMBackend(completion_call=Recorder(_Stream(chunks))).execute(_request(stream=True))
+    assert raised.value.category == ("partial_output" if with_output else "malformed_response")
+    if with_output:
+        assert isinstance(raised.value, PartialOutputError)
+        assert raised.value.partial_output == "partial"
+    assert raised.value.latency_ms is not None
+
+
+@pytest.mark.mock
+async def test_stream_final_result_validation_error_is_normalized(monkeypatch: pytest.MonkeyPatch):
+    """[Local] malformed streaming result: final validation failures preserve prior output as partial.
+
+    Scenario: Result construction raises a validation error after a text chunk was received.
+    Boundaries: Real LiteLLMBackend with only its result builder replaced; no network.
+    On failure, first check: _execute_stream final result normalization.
+    """
+    backend = LiteLLMBackend(completion_call=Recorder(_Stream([_chunk("partial")])))
+
+    def invalid_result(*args: Any, **kwargs: Any) -> Any:
+        """Simulate a final DTO validation failure."""
+        raise ValidationError.from_exception_data(
+            "ExecutionResult", [{"type": "missing", "loc": ("output_text",), "input": {}}]
+        )
+
+    monkeypatch.setattr(backend, "_build_result", invalid_result)
+    with pytest.raises(PartialOutputError) as raised:
+        await backend.execute(_request(stream=True))
+    assert raised.value.partial_output == "partial"
 
 
 @pytest.mark.mock
