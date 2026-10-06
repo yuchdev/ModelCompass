@@ -352,17 +352,22 @@ def test_benchmark_cli_evaluates_json_files(tmp_path: Path):
     Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
     On failure, first check: the failing assertion and the value it compares against.
     """
-    dataset_file = tmp_path / "dataset.json"
+    dataset_file = tmp_path / "dataset.jsonl"
     output_file = tmp_path / "outputs.json"
     dataset_file.write_text(
-        json.dumps(
+        json.dumps({"record_type": "dataset", "name": "tiny", "version": "1.0.0"})
+        + "\n"
+        + json.dumps(
             {
-                "name": "tiny",
+                "record_type": "case",
+                "case_id": "one",
                 "task": "qa",
+                "input_text": "question",
                 "evaluator": "exact",
-                "cases": [{"case_id": "one", "input_text": "question", "expected_output": "answer"}],
+                "expected_output": "answer",
             }
-        ),
+        )
+        + "\n",
         encoding="utf-8",
     )
     output_file.write_text(json.dumps({"one": "answer"}), encoding="utf-8")
@@ -409,11 +414,12 @@ def test_benchmark_cli_can_persist_quality_evidence(tmp_path: Path, monkeypatch:
     Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
     On failure, first check: the failing assertion and the value it compares against.
     """
-    dataset_file = tmp_path / "dataset.json"
+    dataset_file = tmp_path / "dataset.jsonl"
     output_file = tmp_path / "outputs.json"
     dataset_file.write_text(
-        '{"name":"tiny","task":"qa","evaluator":"exact","cases":'
-        '[{"case_id":"one","input_text":"q","expected_output":"a"}]}',
+        '{"record_type":"dataset","name":"tiny","version":"1.0.0"}\n'
+        '{"record_type":"case","case_id":"one","task":"qa","input_text":"q",'
+        '"evaluator":"exact","expected_output":"a"}\n',
         encoding="utf-8",
     )
     output_file.write_text('{"one":"a"}', encoding="utf-8")
@@ -448,9 +454,14 @@ def test_benchmark_cli_rejects_invalid_output_file(tmp_path: Path):
     Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
     On failure, first check: the failing assertion and the value it compares against.
     """
-    dataset_file = tmp_path / "dataset.json"
+    dataset_file = tmp_path / "dataset.jsonl"
     output_file = tmp_path / "outputs.json"
-    dataset_file.write_text('{"name":"d","task":"t","evaluator":"exact","cases":[]}', encoding="utf-8")
+    dataset_file.write_text(
+        '{"record_type":"dataset","name":"d","version":"1.0.0"}\n'
+        '{"record_type":"case","case_id":"one","task":"t","input_text":"q",'
+        '"evaluator":"exact","expected_output":"a"}\n',
+        encoding="utf-8",
+    )
     output_file.write_text('["not", "an object"]', encoding="utf-8")
     result = runner.invoke(
         app,

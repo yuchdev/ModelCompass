@@ -34,11 +34,14 @@ nav:
       - Observations: concepts/observations.md
       - Selection: concepts/selection.md
       - Pareto analysis: concepts/pareto.md
+      - Quality evidence: concepts/quality.md
   - Guides:
       - Catalogs: guides/catalogs.md
       - Analytics and selection: guides/analytics.md
       - Selection policies: guides/selection-policies.md
       - Storage: guides/storage.md
+      - Benchmarks: guides/benchmarks.md
+      - Custom evaluators: guides/custom-evaluators.md
   - Testing:
       - Overview: testing.md
       - Taxonomy: qa/testing.md

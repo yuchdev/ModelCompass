@@ -19,7 +19,7 @@ from rich.table import Table
 
 from model_compass import __version__
 from model_compass.application import analytics
-from model_compass.benchmarks import BenchmarkDataset, evaluate_benchmark
+from model_compass.benchmarks import evaluate_offline, load_dataset_jsonl
 from model_compass.config import default_paths
 from model_compass.domain import ModelProfile, RequestProfile
 from model_compass.exceptions import ModelCompassError
@@ -331,7 +331,7 @@ def pareto(
 
 @app.command()
 def benchmark(
-    dataset: Annotated[Path, typer.Option(exists=True, dir_okay=False, readable=True)],
+    dataset: Annotated[Path, typer.Option(exists=True, dir_okay=False, readable=True, help="JSONL dataset file")],
     outputs: Annotated[Path, typer.Option(exists=True, dir_okay=False, readable=True)],
     model_id: Annotated[str, typer.Option("--model", help="Model identifier for the report")],
     record: Annotated[
@@ -344,13 +344,13 @@ def benchmark(
 ):
     """Evaluate saved benchmark outputs offline with a deterministic evaluator."""
     try:
-        dataset_model = BenchmarkDataset.model_validate_json(dataset.read_text(encoding="utf-8"))
+        dataset_model = load_dataset_jsonl(dataset.read_text(encoding="utf-8"))
         raw_outputs = json.loads(outputs.read_text(encoding="utf-8"))
         if not isinstance(raw_outputs, dict) or not all(
             isinstance(key, str) and isinstance(value, str) for key, value in raw_outputs.items()
         ):
             raise ValueError("outputs file must contain a JSON object of string case IDs to strings")
-        report = evaluate_benchmark(dataset_model, raw_outputs, model_id=model_id)
+        report = evaluate_offline(dataset_model, raw_outputs, model_id=model_id)
         if record:
             analytics.record_benchmark(report)
     except (ModelCompassError, OSError, ValueError) as exc:

@@ -12,8 +12,7 @@ from model_compass.application import AnalyticsFacade, analytics
 from model_compass.benchmarks import (
     BenchmarkCase,
     BenchmarkDataset,
-    EvaluatorType,
-    evaluate_benchmark,
+    evaluate_offline,
 )
 from model_compass.catalogs.service import CatalogService
 from model_compass.config import AppPaths
@@ -230,12 +229,11 @@ def test_facade_records_benchmark_as_quality_evidence(tmp_path: Path):
     Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
     On failure, first check: the failing assertion and the value it compares against.
     """
-    report = evaluate_benchmark(
+    report = evaluate_offline(
         BenchmarkDataset(
             name="tiny",
-            task="qa",
-            evaluator=EvaluatorType.EXACT,
-            cases=(BenchmarkCase(case_id="one", input_text="q", expected_output="a"),),
+            version="1.0.0",
+            cases=(BenchmarkCase(case_id="one", task="qa", input_text="q", evaluator="exact", expected_output="a"),),
         ),
         {"one": "a"},
         model_id="test:m",

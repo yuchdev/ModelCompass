@@ -2,41 +2,44 @@ from __future__ import annotations
 
 import pytest
 
-from model_compass.benchmarks import (
-    BenchmarkCase,
-    BenchmarkDataset,
-    EvaluatorType,
-    evaluate_benchmark,
-)
+from model_compass.benchmarks import BenchmarkCase, BenchmarkDataset, evaluate_offline
 from model_compass.exceptions import BenchmarkError
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    ("evaluator", "expected", "actual", "passed"),
+    ("evaluator", "expected_output", "actual", "passed"),
     [
-        (EvaluatorType.EXACT, "answer", "answer", True),
-        (EvaluatorType.EXACT, "answer", "Answer", False),
-        (EvaluatorType.REGEX, r"answer-\d+", "answer-42", True),
-        (EvaluatorType.REGEX, r"answer-\d+", "answer-x", False),
-        (EvaluatorType.JSON, '{"a": 1}', '{"a":1}', True),
-        (EvaluatorType.JSON, '{"a": 1}', "not-json", False),
+        ("exact", "answer", "answer", True),
+        ("exact", "answer", "Answer", False),
+        ("regex", r"answer-\d+", "answer-42", True),
+        ("regex", r"answer-\d+", "answer-x", False),
     ],
 )
-def test_benchmark_evaluators_are_deterministic(evaluator: EvaluatorType, expected: str, actual: str, passed: bool):
-    """[Unit] deterministic evaluators: exact/regex/json evaluators pass or fail as expected.
+def test_offline_evaluation_scores_deterministic_evaluators(
+    evaluator: str, expected_output: str, actual: str, passed: bool
+):
+    """[Unit] offline evaluation: exact/regex evaluators pass or fail as expected.
 
-    Scenario: Runs a one-case dataset through each evaluator with matching and non-matching outputs.
-    Boundaries: Pure evaluation logic over in-memory datasets; no I/O.
+    Scenario: Runs a one-case single-task dataset through evaluate_offline with
+        matching and non-matching outputs.
+    Boundaries: Pure evaluation logic over an in-memory dataset; no I/O.
     On failure, first check: the evaluator comparison for the failing evaluator/input combination.
     """
     dataset = BenchmarkDataset(
         name="fixture",
-        task="classification",
-        evaluator=evaluator,
-        cases=(BenchmarkCase(case_id="one", input_text="question", expected_output=expected),),
+        version="1.0.0",
+        cases=(
+            BenchmarkCase(
+                case_id="one",
+                task="classification",
+                input_text="question",
+                evaluator=evaluator,
+                expected_output=expected_output,
+            ),
+        ),
     )
-    report = evaluate_benchmark(dataset, {"one": actual}, model_id="test:model")
+    report = evaluate_offline(dataset, {"one": actual}, model_id="test:model")
 
     assert report.sample_size == 1
     assert report.quality_score == (1 if passed else 0)
@@ -44,7 +47,7 @@ def test_benchmark_evaluators_are_deterministic(evaluator: EvaluatorType, expect
 
 
 @pytest.mark.unit
-def test_benchmark_missing_and_unknown_outputs_are_explicit():
+def test_offline_evaluation_missing_and_unknown_outputs_are_explicit():
     """[Unit] missing/unknown outputs: missing answers fail and unknown case ids are rejected.
 
     Scenario: Scores a two-case dataset with one answer, then feeds unknown ids and an empty dataset.
@@ -53,46 +56,86 @@ def test_benchmark_missing_and_unknown_outputs_are_explicit():
     """
     dataset = BenchmarkDataset(
         name="fixture",
-        task="qa",
-        evaluator=EvaluatorType.EXACT,
+        version="1.0.0",
         cases=(
-            BenchmarkCase(case_id="one", input_text="q1", expected_output="a1"),
-            BenchmarkCase(case_id="two", input_text="q2", expected_output="a2"),
+            BenchmarkCase(case_id="one", task="qa", input_text="q1", evaluator="exact", expected_output="a1"),
+            BenchmarkCase(case_id="two", task="qa", input_text="q2", evaluator="exact", expected_output="a2"),
         ),
     )
-    report = evaluate_benchmark(dataset, {"one": "a1"}, model_id="test:model")
+    report = evaluate_offline(dataset, {"one": "a1"}, model_id="test:model")
     assert report.quality_score == 0.5
     assert report.cases[1].passed is False
 
-    with pytest.raises(ValueError, match="unknown case ids"):
-        evaluate_benchmark(dataset, {"unexpected": "answer"}, model_id="test:model")
-    with pytest.raises(ValueError, match="at least one"):
-        evaluate_benchmark(dataset.model_copy(update={"cases": ()}), {}, model_id="test:model")
+    with pytest.raises(BenchmarkError, match="unknown case ids"):
+        evaluate_offline(dataset, {"unexpected": "answer"}, model_id="test:model")
+    with pytest.raises(BenchmarkError, match="at least one"):
+        evaluate_offline(dataset.model_copy(update={"cases": ()}), {}, model_id="test:model")
 
 
 @pytest.mark.unit
-def test_benchmark_rejects_duplicate_case_ids():
-    """[Unit] duplicate case ids: a dataset with repeated case ids raises BenchmarkError.
+def test_offline_evaluation_rejects_mixed_task_datasets():
+    """[Unit] mixed-task rejection: offline evaluation requires a single-task dataset.
 
-    Scenario: Builds a dataset with two cases sharing an id and evaluates it.
+    Scenario: Builds a dataset with two cases spanning different tasks and evaluates it.
     Boundaries: Pure evaluation logic over an in-memory dataset; no I/O.
-    On failure, first check: the duplicate-case-id validation raising BenchmarkError.
+    On failure, first check: evaluate_offline's single-task guard.
     """
     dataset = BenchmarkDataset(
         name="fixture",
-        task="qa",
-        evaluator=EvaluatorType.EXACT,
+        version="1.0.0",
         cases=(
-            BenchmarkCase(case_id="one", input_text="q1", expected_output="a1"),
-            BenchmarkCase(case_id="one", input_text="q2", expected_output="a2"),
+            BenchmarkCase(case_id="one", task="qa", input_text="q1", evaluator="exact", expected_output="a1"),
+            BenchmarkCase(
+                case_id="two", task="summarization", input_text="q2", evaluator="exact", expected_output="a2"
+            ),
         ),
     )
-    with pytest.raises(BenchmarkError, match="duplicate case ids: one"):
-        evaluate_benchmark(dataset, {"one": "a1"}, model_id="test:model")
+    with pytest.raises(BenchmarkError, match="single-task dataset"):
+        evaluate_offline(dataset, {"one": "a1", "two": "a2"}, model_id="test:model")
 
 
 @pytest.mark.unit
-def test_benchmark_invalid_regex_raises_benchmark_error():
+def test_offline_evaluation_rejects_llm_judge_cases():
+    """[Unit] judge rejection: offline evaluation refuses cases that require the LLM judge.
+
+    Scenario: Builds a single case whose evaluator is 'llm_judge' and evaluates it offline.
+    Boundaries: Pure evaluation logic; no execution backend is available in this path.
+    On failure, first check: evaluate_offline's llm_judge guard.
+    """
+    dataset = BenchmarkDataset(
+        name="fixture",
+        version="1.0.0",
+        cases=(
+            BenchmarkCase(
+                case_id="one", task="qa", input_text="q1", evaluator="llm_judge", evaluator_config={"rubric": "x"}
+            ),
+        ),
+    )
+    with pytest.raises(BenchmarkError, match="llm_judge"):
+        evaluate_offline(dataset, {"one": "a1"}, model_id="test:model")
+
+
+@pytest.mark.unit
+def test_benchmark_dataset_rejects_duplicate_case_ids():
+    """[Unit] duplicate case ids: a dataset with repeated case ids raises on construction.
+
+    Scenario: Builds a dataset with two cases sharing an id.
+    Boundaries: Pure pydantic validation; no I/O.
+    On failure, first check: BenchmarkDataset's duplicate-case-id validator.
+    """
+    with pytest.raises(ValueError, match="duplicate case ids: one"):
+        BenchmarkDataset(
+            name="fixture",
+            version="1.0.0",
+            cases=(
+                BenchmarkCase(case_id="one", task="qa", input_text="q1", evaluator="exact", expected_output="a1"),
+                BenchmarkCase(case_id="one", task="qa", input_text="q2", evaluator="exact", expected_output="a2"),
+            ),
+        )
+
+
+@pytest.mark.unit
+def test_offline_evaluation_invalid_regex_raises_benchmark_error():
     """[Unit] invalid regex: an uncompilable regex expectation raises BenchmarkError.
 
     Scenario: Uses the regex evaluator with an invalid expected pattern and evaluates it.
@@ -101,9 +144,8 @@ def test_benchmark_invalid_regex_raises_benchmark_error():
     """
     dataset = BenchmarkDataset(
         name="fixture",
-        task="qa",
-        evaluator=EvaluatorType.REGEX,
-        cases=(BenchmarkCase(case_id="one", input_text="q", expected_output="("),),
+        version="1.0.0",
+        cases=(BenchmarkCase(case_id="one", task="qa", input_text="q", evaluator="regex", expected_output="("),),
     )
     with pytest.raises(BenchmarkError, match="invalid regex"):
-        evaluate_benchmark(dataset, {"one": "a"}, model_id="test:model")
+        evaluate_offline(dataset, {"one": "a"}, model_id="test:model")

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Model Compass is an alpha-stage Python 3.11+ library and CLI (`model-compass`) for request-aware LLM model analytics: catalog ingestion (OpenRouter + LiteLLM), capability matching, token/cost estimation, and model comparison. Quality/latency ranking, storage, execution, and benchmarks packages are still empty stubs. `AGENTS.md` is the authoritative agent contract — read it before non-trivial changes.
+Model Compass is an alpha-stage Python 3.11+ library and CLI (`model-compass`) for request-aware LLM model analytics: catalog ingestion (OpenRouter + LiteLLM), capability matching, token/cost estimation, model comparison, and reproducible benchmarking (`benchmarks/`: JSONL datasets, deterministic evaluators, an opt-in LLM judge, a budget-aware runner, and task-aware quality aggregation feeding selection). `AGENTS.md` is the authoritative agent contract — read it before non-trivial changes.
 
 ## Commands
 

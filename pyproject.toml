@@ -54,39 +54,6 @@ docs = [
     "mkdocstrings[python]>=0.27",
 ]
 
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-
-[tool.ruff.lint]
-select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "N",    # pep8-naming
-    "UP",   # pyupgrade
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "SIM",  # flake8-simplify
-    "PIE",  # flake8-pie
-    "PT",   # flake8-pytest-style
-    "RUF",  # ruff-specific
-    "ASYNC",# flake8-async
-    "DTZ",  # flake8-datetimez
-    "PTH",  # flake8-use-pathlib
-    "TRY",  # tryceratops
-    "PERF", # perflint
-]
-ignore = [
-    "TRY003", # long messages in raise - acceptable for user-facing errors
-    "TRY301", # abstract raise in try - common pattern
-]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-
 [tool.mypy]
 strict = true
 warn_unreachable = true
@@ -122,3 +89,27 @@ exclude_lines = [
     "raise AssertionError",
     "@overload",
 ]
+
+[tool.flakeforge]
+include = ["src", "tests"]
+# exclude = []
+
+# select = []
+# ignore = []
+
+# Pre-existing violations accepted at migration time (the plugin was never
+# actually wired into Flake8 before, so these were invisible until now).
+# Gates only *new* violations from here on; see flakeforge's baseline docs.
+baseline = "flakeforge-baseline.json"
+
+# When false, a `# noqa` comment never suppresses a violation (the rule
+# engine's noqa support is bypassed entirely). Default true.
+allow_noqa = true
+
+# Whitelist: when non-empty, only files/directories listed here may use `# noqa`.
+# When empty, all files not in `noqa_forbidden` are permitted.
+# noqa_allowed = []
+
+# Blacklist: files/directories where `# noqa` is strictly forbidden (violations always fire).
+# Blacklist always wins over `noqa_allowed`.
+# noqa_forbidden = []

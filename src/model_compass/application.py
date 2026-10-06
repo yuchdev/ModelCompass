@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional, Union
 
-from model_compass.benchmarks import BenchmarkReport
+from model_compass.benchmarks import OfflineBenchmarkReport
 from model_compass.catalogs import CatalogService
 from model_compass.config import default_paths
 from model_compass.domain import ModelProfile, RequestProfile
@@ -124,7 +124,7 @@ class AnalyticsFacade:
             now_utc=now_utc,
         )
 
-    def record_benchmark(self, report: BenchmarkReport):
+    def record_benchmark(self, report: OfflineBenchmarkReport):
         """Persist benchmark quality and provenance separately from execution outcomes."""
         self._observations().record_quality_evidence(report.to_quality_evidence())
 
