@@ -82,7 +82,7 @@ class LLMJudgeEvaluator:
             parameters={"temperature": float(self.config.temperature), **self.config.extra_parameters},
         )
         try:
-            result = await self._backend.complete(request)
+            result = await self._backend.execute(request)
         except ExecutionError as exc:
             raise JudgeEvaluationError(f"judge backend execution failed: {exc}") from exc
 

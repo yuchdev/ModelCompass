@@ -31,7 +31,7 @@ class FakeExecutionBackend:
         self._fail_models = fail_models
         self.calls: list[CompletionRequest] = []
 
-    async def complete(self, request: CompletionRequest) -> ExecutionResult:
+    async def execute(self, request: CompletionRequest) -> ExecutionResult:
         """Return a scripted response for the request's model, or raise if it's set to fail."""
         self.calls.append(request)
         if request.model_id in self._fail_models:

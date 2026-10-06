@@ -253,7 +253,7 @@ async def _execute_case(
             parameters=dict(model_parameters.get(model_id, {})),
         )
         try:
-            execution = await backend.complete(request)
+            execution = await backend.execute(request)
         except ExecutionError as exc:
             await tracker.settle(model_id, reserved, None)
             return (

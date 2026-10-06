@@ -1,7 +1,7 @@
 """Model Compass — request-aware LLM model analytics, comparison, and selection."""
 
 from model_compass._version import __version__
-from model_compass.application import analytics
+from model_compass.application import SelectedExecution, analytics
 from model_compass.domain import RequestProfile
 from model_compass.exceptions import (
     BenchmarkError,
@@ -13,7 +13,14 @@ from model_compass.exceptions import (
     SelectionError,
     StorageError,
 )
-from model_compass.execution import ExecutionError
+from model_compass.execution import (
+    CostReconciliation,
+    ExecutionError,
+    ExecutionRequest,
+    ExecutionResult,
+    LiteLLMBackend,
+    UsageRecord,
+)
 from model_compass.metrics import Observation
 from model_compass.selection import (
     BenchmarkQualityProvider,
@@ -36,8 +43,14 @@ __all__ = [
     "BenchmarkError",
     "BenchmarkQualityProvider",
     "ConfigurationError",
+    "CostReconciliation",
     "DependencyError",
     "ExecutionError",
+    "ExecutionRequest",
+    "ExecutionResult",
+    "LiteLLMBackend",
+    "SelectedExecution",
+    "UsageRecord",
     "InMemoryQualityProvider",
     "MetricEvidence",
     "ModelCompassError",

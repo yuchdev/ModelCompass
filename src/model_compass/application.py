@@ -7,16 +7,22 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional, Union
 
+from pydantic import BaseModel, ConfigDict
+
 from model_compass.benchmarks import OfflineBenchmarkReport
 from model_compass.catalogs import CatalogService
 from model_compass.config import default_paths
 from model_compass.domain import ModelProfile, RequestProfile
 from model_compass.execution import (
     CompletionRequest,
+    CostReconciliation,
     ExecutionBackend,
     ExecutionError,
+    ExecutionRequest,
     ExecutionResult,
     LiteLLMBackend,
+    ObservationSink,
+    failed_observation,
 )
 from model_compass.metrics import Observation, ObservationSummary
 from model_compass.selection import (
@@ -30,6 +36,17 @@ from model_compass.selection import (
     select_model,
 )
 from model_compass.storage import ObservationStoreProtocol, SQLiteObservationStore
+
+
+class SelectedExecution(BaseModel):
+    """A model selection, the execution it led to, and the recorded observation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    selection: SelectionResult
+    execution: ExecutionResult
+    observation_id: str
+    reconciliation: CostReconciliation
 
 
 @dataclass
@@ -144,7 +161,7 @@ class AnalyticsFacade:
     ) -> ExecutionResult:
         """Run a completion and persist only aggregate usage observations."""
         try:
-            result = await (backend or LiteLLMBackend()).complete(request)
+            result = await (backend or LiteLLMBackend()).execute(request)
         except ExecutionError as exc:
             if exc.latency_ms is not None:
                 self.record_observation(
@@ -158,6 +175,55 @@ class AnalyticsFacade:
             raise
         self.record_observation(result.to_observation())
         return result
+
+    async def select_and_execute(
+        self,
+        *,
+        profiles: list[ModelProfile],
+        request_profile: RequestProfile,
+        execution_request: ExecutionRequest,
+        policy: Union[SelectionPolicy, str] = SelectionPolicy.CHEAPEST,
+        backend: Optional[ExecutionBackend] = None,
+        observation_sink: Optional[ObservationSink] = None,
+        now_utc: Optional[datetime] = None,
+        **selection_options: Any,
+    ) -> SelectedExecution:
+        """Select a model, execute against it, record the observation, and reconcile cost.
+
+        The selected model replaces ``execution_request.model_id``. Selection evidence is read
+        from this facade's observation store; the observation is written to ``observation_sink``
+        (default: the same store). Pass ``NullObservationSink()`` to execute without persisting.
+        A failed execution is recorded too, then re-raised with ``observation_id`` attached.
+        """
+        selection = self.select(
+            profiles,
+            request_profile,
+            policy=SelectionPolicy(policy),
+            raise_on_empty=True,
+            now_utc=now_utc,
+            **selection_options,
+        )
+        assert selection.selected is not None
+        estimated_before = selection.selected.expected_cost_usd
+        request = execution_request.model_copy(update={"model_id": selection.selected.model_id})
+        sink = observation_sink if observation_sink is not None else self._observations()
+        try:
+            result = await (backend or LiteLLMBackend()).execute(request)
+        except ExecutionError as exc:
+            exc.observation_id = sink.record_observation(
+                failed_observation(request, exc, estimated_before=estimated_before)
+            ).observation_id
+            raise
+        reconciliation = result.reconcile(estimated_before)
+        stored = sink.record_observation(
+            result.to_stored_observation(estimated_before=estimated_before, reconciliation=reconciliation)
+        )
+        return SelectedExecution(
+            selection=selection,
+            execution=result,
+            observation_id=stored.observation_id,
+            reconciliation=reconciliation,
+        )
 
     def _observations(self) -> ObservationStoreProtocol:
         """Return the observation store, creating the default SQLite store on demand."""
@@ -186,4 +252,4 @@ class _LazyAnalyticsFacade:
 
 analytics = _LazyAnalyticsFacade()
 
-__all__ = ["AnalyticsFacade", "analytics"]
+__all__ = ["AnalyticsFacade", "SelectedExecution", "analytics"]
