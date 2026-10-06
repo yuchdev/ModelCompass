@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
+from model_compass import application
 from model_compass.application import AnalyticsFacade, analytics
 from model_compass.benchmarks import (
     BenchmarkCase,
@@ -15,7 +17,15 @@ from model_compass.benchmarks import (
 )
 from model_compass.catalogs.service import CatalogService
 from model_compass.config import AppPaths
-from model_compass.domain import CatalogSnapshot, RequestProfile
+from model_compass.domain import (
+    CatalogSnapshot,
+    ModelCapabilities,
+    ModelIdentity,
+    ModelProfile,
+    PriceComponent,
+    Pricing,
+    RequestProfile,
+)
 from model_compass.execution import CompletionRequest, ExecutionError, ExecutionResult
 from model_compass.metrics import Observation
 from model_compass.selection import SelectionPolicy
@@ -23,7 +33,10 @@ from model_compass.storage import ObservationStore
 
 
 class FakeService(CatalogService):
-    def __init__(self) -> None:
+    """Catalog service double that counts refresh calls and never performs real I/O."""
+
+    def __init__(self):
+        """Initialise the refresh call counter."""
         self.calls = 0
 
     async def refresh_async(
@@ -32,20 +45,33 @@ class FakeService(CatalogService):
         force: bool = False,
         offline: bool = False,
         include_litellm: bool = True,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> CatalogSnapshot:
+        """Record the call and raise to prove the facade never refreshes it."""
         del force, offline, include_litellm, now_utc
         self.calls += 1
         raise RuntimeError("not needed")
 
 
 @pytest.mark.unit
-def test_lazy_analytics_proxy_exposes_catalog() -> None:
+def test_lazy_analytics_proxy_exposes_catalog():
+    """[Unit] Lazy analytics proxy exposes catalog: verifies the described behaviour holds.
+
+    Scenario: Exercises lazy analytics proxy exposes catalog and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     assert hasattr(analytics, "catalog")
 
 
 @pytest.mark.unit
-def test_analytics_facade_can_inject_service() -> None:
+def test_analytics_facade_can_inject_service():
+    """[Unit] Analytics facade can inject service: verifies the described behaviour holds.
+
+    Scenario: Exercises analytics facade can inject service and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     service = FakeService()
     facade = AnalyticsFacade(catalog=service)
     assert facade.catalog is service
@@ -53,22 +79,26 @@ def test_analytics_facade_can_inject_service() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_refresh_sync_raises_in_running_loop() -> None:
+async def test_refresh_sync_raises_in_running_loop():
+    """[Unit] Refresh sync raises in running loop: verifies the described behaviour holds.
+
+    Scenario: Exercises refresh sync raises in running loop and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     service = CatalogService()
     with pytest.raises(RuntimeError):
         service.refresh()
 
 
 @pytest.mark.unit
-def test_facade_estimates_and_selects_using_injected_store(tmp_path: Path) -> None:
-    from model_compass.domain import (
-        ModelCapabilities,
-        ModelIdentity,
-        ModelProfile,
-        PriceComponent,
-        Pricing,
-    )
+def test_facade_estimates_and_selects_using_injected_store(tmp_path: Path):
+    """[Unit] Facade estimates and selects using injected store: verifies the described behaviour holds.
 
+    Scenario: Exercises facade estimates and selects using injected store and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = ModelProfile(
         identity=ModelIdentity(provider="test", model_id="m", canonical_id="test:m"),
         capabilities=ModelCapabilities(
@@ -105,16 +135,30 @@ def test_facade_estimates_and_selects_using_injected_store(tmp_path: Path) -> No
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_facade_execute_records_only_normalized_usage() -> None:
+async def test_facade_execute_records_only_normalized_usage():
+    """[Unit] Facade execute records only normalized usage: verifies the described behaviour holds.
+
+    Scenario: Exercises facade execute records only normalized usage and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
+
     class Store(ObservationStore):
-        def __init__(self) -> None:
+        """Observation store double that captures recorded observations in memory."""
+
+        def __init__(self):
+            """Initialise the in-memory record list."""
             self.records: list[Observation] = []
 
-        def record(self, observation: Observation) -> None:
+        def record(self, observation: Observation):
+            """Append *observation* to the captured record list."""
             self.records.append(observation)
 
     class Backend:
+        """Execution backend double that returns a fixed successful result."""
+
         async def complete(self, request: CompletionRequest) -> ExecutionResult:
+            """Return a canned successful execution result for *request*."""
             return ExecutionResult(
                 model_id=request.model_id,
                 task=request.task,
@@ -142,16 +186,30 @@ async def test_facade_execute_records_only_normalized_usage() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_facade_execute_records_failed_latency_without_error_text() -> None:
+async def test_facade_execute_records_failed_latency_without_error_text():
+    """[Unit] Facade execute records failed latency without error text: verifies the described behaviour holds.
+
+    Scenario: Exercises facade execute records failed latency without error text and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
+
     class Store(ObservationStore):
-        def __init__(self) -> None:
+        """Observation store double that captures recorded observations in memory."""
+
+        def __init__(self):
+            """Initialise the in-memory record list."""
             self.records: list[Observation] = []
 
-        def record(self, observation: Observation) -> None:
+        def record(self, observation: Observation):
+            """Append *observation* to the captured record list."""
             self.records.append(observation)
 
     class Backend:
+        """Execution backend double that always raises an execution error."""
+
         async def complete(self, request: CompletionRequest) -> ExecutionResult:
+            """Raise an execution error carrying a fixed latency for *request*."""
             del request
             raise ExecutionError("provider failure", latency_ms=4)
 
@@ -165,7 +223,13 @@ async def test_facade_execute_records_failed_latency_without_error_text() -> Non
 
 
 @pytest.mark.unit
-def test_facade_records_benchmark_as_quality_evidence(tmp_path: Path) -> None:
+def test_facade_records_benchmark_as_quality_evidence(tmp_path: Path):
+    """[Unit] Facade records benchmark as quality evidence: verifies the described behaviour holds.
+
+    Scenario: Exercises facade records benchmark as quality evidence and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     report = evaluate_benchmark(
         BenchmarkDataset(
             name="tiny",
@@ -185,10 +249,13 @@ def test_facade_records_benchmark_as_quality_evidence(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_facade_lazily_creates_default_store_on_use(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from model_compass import application
+def test_facade_lazily_creates_default_store_on_use(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """[Local] Facade lazily creates default store on use: verifies the described behaviour holds.
+
+    Scenario: Exercises facade lazily creates default store on use and asserts the expected outcome.
+    Boundaries: Collaborators are faked or monkeypatched in-process; no real network or disk I/O.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
 
     paths = AppPaths(
         config_dir=tmp_path / "config",

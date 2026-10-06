@@ -24,7 +24,8 @@ class SelectionError(ModelCompassError, ValueError):
 class NoEligibleModelError(SelectionError):
     """Raised when hard constraints reject every candidate."""
 
-    def __init__(self, reason_counts: dict[str, int]) -> None:
+    def __init__(self, reason_counts: dict[str, int]):
+        """Record rejection reason counts and build a summary message."""
         self.reason_counts = dict(sorted(reason_counts.items()))
         summary = ", ".join(f"{reason}: {count}" for reason, count in self.reason_counts.items())
         super().__init__(f"no eligible model remains ({summary or 'no candidates supplied'})")

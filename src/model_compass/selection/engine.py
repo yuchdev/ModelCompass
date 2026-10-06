@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -53,6 +53,7 @@ class SelectionDataPolicy(BaseModel):
     @field_validator("wilson_z")
     @classmethod
     def _positive_finite_z(cls, value: Decimal) -> Decimal:
+        """Reject a non-finite or non-positive Wilson z value."""
         if not value.is_finite() or value <= 0:
             raise ValueError("wilson_z must be finite and greater than zero")
         return value
@@ -91,8 +92,8 @@ class RequestCostEstimate(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     model_id: str
-    amount_usd: Decimal | None
-    known_amount_usd: Decimal | None = None
+    amount_usd: Optional[Decimal]
+    known_amount_usd: Optional[Decimal] = None
     missing_components: tuple[str, ...] = ()
 
 
@@ -104,21 +105,21 @@ class CandidateAssessment(BaseModel):
     model_id: str
     eligible: bool
     reasons: tuple[str, ...] = ()
-    expected_cost_usd: Decimal | None = None
-    quality: Decimal | None = None
-    reliability: Decimal | None = None
-    reliability_lower_bound: Decimal | None = None
-    latency_ms: Decimal | None = None
+    expected_cost_usd: Optional[Decimal] = None
+    quality: Optional[Decimal] = None
+    reliability: Optional[Decimal] = None
+    reliability_lower_bound: Optional[Decimal] = None
+    latency_ms: Optional[Decimal] = None
     sample_size: int = 0
-    quality_source: str | None = None
-    quality_evidence: MetricEvidence[Decimal] | None = None
-    latency_evidence: MetricEvidence[Decimal] | None = None
-    reliability_evidence: MetricEvidence[Decimal] | None = None
+    quality_source: Optional[str] = None
+    quality_evidence: Optional[MetricEvidence[Decimal]] = None
+    latency_evidence: Optional[MetricEvidence[Decimal]] = None
+    reliability_evidence: Optional[MetricEvidence[Decimal]] = None
     constraint_results: tuple[ConstraintResult, ...] = ()
     rankable: bool = True
     cost_efficiency_state: Literal["finite", "positive_infinity", "unknown"] = "unknown"
-    rank: int | None = None
-    pareto_member: bool | None = None
+    rank: Optional[int] = None
+    pareto_member: Optional[bool] = None
 
 
 class SelectionResult(BaseModel):
@@ -127,27 +128,23 @@ class SelectionResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     policy: SelectionPolicy
-    selected: CandidateAssessment | None
+    selected: Optional[CandidateAssessment]
     ranked: tuple[CandidateAssessment, ...]
     assessments: tuple[CandidateAssessment, ...]
     rejection_counts: dict[str, int] = Field(default_factory=dict)
     assumptions: tuple[str, ...] = ()
-    catalog_retrieved_at: datetime | None = None
+    catalog_retrieved_at: Optional[datetime] = None
     catalog_is_stale: bool = False
 
     def human_summary(self) -> str:
         """Describe the result using its primary objective and selected evidence."""
         if self.selected is None:
             reasons = ", ".join(f"{code}={count}" for code, count in self.rejection_counts.items())
-            return f"No model was selected under {self.policy.value}." + (
-                f" Rejections: {reasons}." if reasons else ""
-            )
+            return f"No model was selected under {self.policy.value}." + (f" Rejections: {reasons}." if reasons else "")
         selected = self.selected
         objective = {
             SelectionPolicy.CHEAPEST: f"expected cost ${selected.expected_cost_usd}",
-            SelectionPolicy.BEST: (
-                f"quality {selected.quality} from {selected.quality_source or 'unknown source'}"
-            ),
+            SelectionPolicy.BEST: (f"quality {selected.quality} from {selected.quality_source or 'unknown source'}"),
             SelectionPolicy.FASTEST: (
                 f"latency {selected.latency_ms}ms "
                 f"({selected.latency_evidence.sample_count if selected.latency_evidence else 0} "
@@ -199,12 +196,10 @@ class ParetoResult(BaseModel):
 
 
 def estimate_request_cost(
-    profile: ModelProfile, request: RequestProfile, *, now_utc: datetime | None = None
+    profile: ModelProfile, request: RequestProfile, *, now_utc: Optional[datetime] = None
 ) -> RequestCostEstimate:
     """Estimate token cost using source per-token Decimal rates."""
-    prices = profile.pricing.effective_components(
-        prompt_tokens=request.explicit_input_tokens or 0, now_utc=now_utc
-    )
+    prices = profile.pricing.effective_components(prompt_tokens=request.explicit_input_tokens or 0, now_utc=now_utc)
     missing: list[str] = []
     amount = Decimal("0")
     for key, token_count in (
@@ -237,20 +232,20 @@ def select_model(
     request: RequestProfile,
     *,
     policy: SelectionPolicy = SelectionPolicy.BEST,
-    objective: SelectionPolicy | str | None = None,
+    objective: Optional[Union[SelectionPolicy, str]] = None,
     observations: Sequence[Observation] = (),
     quality_evidence: Sequence[QualityEvidence] = (),
-    quality_provider: QualityProvider | None = None,
-    missing_data: SelectionDataPolicy | None = None,
-    request_cost_estimates: Mapping[str, RequestCostEstimate] | None = None,
+    quality_provider: Optional[QualityProvider] = None,
+    missing_data: Optional[SelectionDataPolicy] = None,
+    request_cost_estimates: Optional[Mapping[str, RequestCostEstimate]] = None,
     constraints: Sequence[SelectionConstraint] = (),
-    min_quality: Decimal | None = None,
-    max_cost: Decimal | None = None,
-    max_cost_usd: Decimal | None = None,
-    max_latency_ms: int | Decimal | None = None,
-    min_reliability: Decimal | None = None,
+    min_quality: Optional[Decimal] = None,
+    max_cost: Optional[Decimal] = None,
+    max_cost_usd: Optional[Decimal] = None,
+    max_latency_ms: Optional[Union[int, Decimal]] = None,
+    min_reliability: Optional[Decimal] = None,
     required_capabilities: Sequence[str] = (),
-    minimum_context: int | None = None,
+    minimum_context: Optional[int] = None,
     allowed_model_ids: Sequence[str] = (),
     blocked_model_ids: Sequence[str] = (),
     allowed_gateways: Sequence[str] = (),
@@ -258,7 +253,7 @@ def select_model(
     allowed_providers: Sequence[str] = (),
     blocked_providers: Sequence[str] = (),
     raise_on_empty: bool = False,
-    now_utc: datetime | None = None,
+    now_utc: Optional[datetime] = None,
 ) -> SelectionResult:
     """Apply hard constraints, then deterministically rank request-aware candidates."""
     if objective is not None:
@@ -269,10 +264,7 @@ def select_model(
     data_policy = missing_data or SelectionDataPolicy()
     task = request.task or "general"
     profiles_by_id = {profile.identity.canonical_id: profile for profile in profiles}
-    summaries = {
-        model_id: summarize_observations(model_id, task, list(observations))
-        for model_id in profiles_by_id
-    }
+    summaries = {model_id: summarize_observations(model_id, task, list(observations)) for model_id in profiles_by_id}
     provider = quality_provider or BenchmarkQualityProvider(quality_evidence)
     built_constraints = (
         *request_constraints(
@@ -305,13 +297,9 @@ def select_model(
         )
         for profile in profiles
     )
-    rankable = [
-        item for item in assessments if item.eligible and _is_rankable(item, policy, data_policy)
-    ]
+    rankable = [item for item in assessments if item.eligible and _is_rankable(item, policy, data_policy)]
     ordered = sorted(rankable, key=lambda item: _rank_key(item, policy, data_policy))
-    ranked = tuple(
-        item.model_copy(update={"rank": index}) for index, item in enumerate(ordered, start=1)
-    )
+    ranked = tuple(item.model_copy(update={"rank": index}) for index, item in enumerate(ordered, start=1))
     frontier_ids = {
         item.model_id
         for item in pareto_frontier(
@@ -335,9 +323,7 @@ def select_model(
     }
     final_assessments_list = []
     for item in assessments:
-        rankability_result = (
-            _rankability_result(item, policy, data_policy) if item.eligible else None
-        )
+        rankability_result = _rankability_result(item, policy, data_policy) if item.eligible else None
         final_assessments_list.append(
             item.model_copy(
                 update={
@@ -358,9 +344,7 @@ def select_model(
                     ),
                     "rankable": item.eligible and rankability_result is None,
                     "reasons": (
-                        (*item.reasons, rankability_result.message)
-                        if rankability_result is not None
-                        else item.reasons
+                        (*item.reasons, rankability_result.message) if rankability_result is not None else item.reasons
                     ),
                     "constraint_results": (
                         (*item.constraint_results, rankability_result)
@@ -374,10 +358,7 @@ def select_model(
     assessed_by_id = {item.model_id: item for item in final_assessments}
     ranked = tuple(assessed_by_id[item.model_id] for item in ranked)
     reasons = Counter(
-        result.reason_code
-        for item in final_assessments
-        for result in item.constraint_results
-        if not result.passed
+        result.reason_code for item in final_assessments for result in item.constraint_results if not result.passed
     )
     result = SelectionResult(
         policy=policy,
@@ -402,21 +383,23 @@ def select_model(
 
 def pareto_frontier(
     candidates: Sequence[CandidateAssessment],
-    objectives: Sequence[ParetoObjective]
-    | Mapping[str, ObjectiveDirection | Literal["minimize", "maximize"]],
+    objectives: Union[
+        Sequence[ParetoObjective],
+        Mapping[str, Union[ObjectiveDirection, Literal["minimize", "maximize"]]],
+    ],
     *,
     missing_value_policy: Literal["exclude", "raise"] = "exclude",
 ) -> tuple[CandidateAssessment, ...]:
     """Return a deterministic frontier; incomplete objective vectors are excluded by default."""
-    return pareto_analysis(
-        candidates, objectives, missing_value_policy=missing_value_policy
-    ).frontier
+    return pareto_analysis(candidates, objectives, missing_value_policy=missing_value_policy).frontier
 
 
 def pareto_analysis(
     candidates: Sequence[CandidateAssessment],
-    objectives: Sequence[ParetoObjective]
-    | Mapping[str, ObjectiveDirection | Literal["minimize", "maximize"]],
+    objectives: Union[
+        Sequence[ParetoObjective],
+        Mapping[str, Union[ObjectiveDirection, Literal["minimize", "maximize"]]],
+    ],
     *,
     missing_value_policy: Literal["exclude", "raise"] = "exclude",
 ) -> ParetoResult:
@@ -427,15 +410,12 @@ def pareto_analysis(
     if missing_value_policy not in {"exclude", "raise"}:
         raise SelectionError(f"unsupported missing-value policy: {missing_value_policy}")
     eligible = [item for item in candidates if item.eligible]
-    complete = [
-        item
-        for item in eligible
-        if all(_objective_value(item, name) is not None for name in directions)
-    ]
+    complete = [item for item in eligible if all(_objective_value(item, name) is not None for name in directions)]
     if missing_value_policy == "raise" and len(complete) != len(eligible):
         raise SelectionError("one or more eligible candidates have missing Pareto values")
 
     def dominates(left: CandidateAssessment, right: CandidateAssessment) -> bool:
+        """Return whether the left candidate Pareto-dominates the right one."""
         strictly_better = False
         for name, direction in directions.items():
             left_value = _objective_value(left, name)
@@ -458,9 +438,7 @@ def pareto_analysis(
                 candidate
                 for candidate in complete
                 if not any(
-                    other is not candidate
-                    and other.model_id != candidate.model_id
-                    and dominates(other, candidate)
+                    other is not candidate and other.model_id != candidate.model_id and dominates(other, candidate)
                     for other in complete
                 )
             ),
@@ -481,9 +459,7 @@ def pareto_analysis(
     return ParetoResult(frontier=frontier, dominated_by=dominators)
 
 
-def wilson_lower_bound(
-    successes: int, sample_count: int, *, z: Decimal = Decimal("1.96")
-) -> Decimal:
+def wilson_lower_bound(successes: int, sample_count: int, *, z: Decimal = Decimal("1.96")) -> Decimal:
     """Return the Wilson score lower bound for a binomial success proportion."""
     if sample_count < 1 or successes < 0 or successes > sample_count:
         raise ValueError("successes and sample_count must define a non-empty binomial sample")
@@ -501,24 +477,21 @@ def wilson_lower_bound(
 def _assess(
     profile: ModelProfile,
     request: RequestProfile,
-    summary: MetricSummary | None,
+    summary: Optional[MetricSummary],
     quality_provider: QualityProvider,
     data_policy: SelectionDataPolicy,
     constraints: Sequence[SelectionConstraint],
     *,
-    request_cost_estimates: Mapping[str, RequestCostEstimate] | None = None,
-    now_utc: datetime | None = None,
+    request_cost_estimates: Optional[Mapping[str, RequestCostEstimate]] = None,
+    now_utc: Optional[datetime] = None,
 ) -> CandidateAssessment:
+    """Assess one model profile against a request, producing a ranked candidate assessment."""
     identity = profile.identity.canonical_id
     task = request.task or "general"
     capabilities = profile.capabilities
     reasons: list[str] = []
-    _require_modalities(
-        reasons, "input", request.input_modalities, capabilities.input_modalities, data_policy
-    )
-    _require_modalities(
-        reasons, "output", request.output_modalities, capabilities.output_modalities, data_policy
-    )
+    _require_modalities(reasons, "input", request.input_modalities, capabilities.input_modalities, data_policy)
+    _require_modalities(reasons, "output", request.output_modalities, capabilities.output_modalities, data_policy)
     for required, label, status in (
         (request.requires_tools, "tool calling", capabilities.tools),
         (request.requires_structured_output, "structured output", capabilities.structured_output),
@@ -537,18 +510,13 @@ def _assess(
             if not data_policy.allow_unknown_capabilities:
                 reasons.append("context length is unknown")
         elif capabilities.context_length < required_context:
-            reasons.append(
-                f"context length {capabilities.context_length} is below {required_context}"
-            )
+            reasons.append(f"context length {capabilities.context_length} is below {required_context}")
     if (
         request.expected_output_tokens is not None
         and capabilities.max_output_tokens is not None
         and capabilities.max_output_tokens < request.expected_output_tokens
     ):
-        reasons.append(
-            f"max output tokens {capabilities.max_output_tokens} is below "
-            f"{request.expected_output_tokens}"
-        )
+        reasons.append(f"max output tokens {capabilities.max_output_tokens} is below {request.expected_output_tokens}")
 
     cost = (
         request_cost_estimates[identity]
@@ -569,9 +537,9 @@ def _assess(
         )
     quality = quality_evidence.value if quality_evidence is not None else None
 
-    reliability: Decimal | None = summary.reliability if summary is not None else None
-    reliability_evidence: MetricEvidence[Decimal] | None = None
-    lower_bound: Decimal | None = None
+    reliability: Optional[Decimal] = summary.reliability if summary is not None else None
+    reliability_evidence: Optional[MetricEvidence[Decimal]] = None
+    lower_bound: Optional[Decimal] = None
     if summary is not None:
         reliability_evidence = MetricEvidence(
             value=summary.reliability,
@@ -581,12 +549,10 @@ def _assess(
             observed_at=summary.observed_at,
             notes=("Raw success rate; ranking uses a Wilson lower confidence bound.",),
         )
-        lower_bound = wilson_lower_bound(
-            summary.success_count, summary.sample_size, z=data_policy.wilson_z
-        )
+        lower_bound = wilson_lower_bound(summary.success_count, summary.sample_size, z=data_policy.wilson_z)
 
-    latency: Decimal | None = None
-    latency_evidence: MetricEvidence[Decimal] | None = None
+    latency: Optional[Decimal] = None
+    latency_evidence: Optional[MetricEvidence[Decimal]] = None
     if summary is not None:
         if summary.sample_size >= data_policy.min_latency_samples:
             latency = Decimal(summary.p95_latency_ms)
@@ -621,9 +587,7 @@ def _assess(
             else 0
         ),
         quality_source=(
-            "; ".join(quality_evidence.notes) or quality_evidence.source
-            if quality_evidence is not None
-            else None
+            "; ".join(quality_evidence.notes) or quality_evidence.source if quality_evidence is not None else None
         ),
         quality_evidence=quality_evidence,
         latency_evidence=latency_evidence,
@@ -639,11 +603,7 @@ def _assess(
     capability_result = ConstraintResult(
         passed=assessment.eligible,
         reason_code="capability_requirements",
-        message=(
-            "capability requirements are satisfied"
-            if assessment.eligible
-            else "; ".join(assessment.reasons)
-        ),
+        message=("capability requirements are satisfied" if assessment.eligible else "; ".join(assessment.reasons)),
         evidence={
             "task": task,
             "input_modalities": tuple(sorted(request.input_modalities)),
@@ -711,9 +671,7 @@ def _assess(
     if latency_evidence is None:
         missing_reasons.append("latency evidence is missing")
     if cost.amount_usd is None:
-        missing_reasons.append(
-            f"expected cost is unknown (missing {', '.join(cost.missing_components)})"
-        )
+        missing_reasons.append(f"expected cost is unknown (missing {', '.join(cost.missing_components)})")
     all_reasons = list(assessment.reasons)
     all_reasons.extend(item.message for item in failed)
     all_reasons.extend(missing_reasons)
@@ -731,6 +689,7 @@ def _is_rankable(
     policy: SelectionPolicy,
     data_policy: SelectionDataPolicy,
 ) -> bool:
+    """Return whether the candidate can be ranked under the given policy."""
     return _rankability_result(assessment, policy, data_policy) is None
 
 
@@ -738,18 +697,15 @@ def _rankability_result(
     assessment: CandidateAssessment,
     policy: SelectionPolicy,
     data_policy: SelectionDataPolicy,
-) -> ConstraintResult | None:
+) -> Optional[ConstraintResult]:
+    """Return a rejection result when the candidate is unrankable, else None."""
     if policy == SelectionPolicy.CHEAPEST and assessment.expected_cost_usd is None:
         return ConstraintResult(
             passed=False,
             reason_code="cheapest_incomplete_cost",
             message="cheapest ranking requires a complete expected cost",
         )
-    if (
-        policy == SelectionPolicy.FASTEST
-        and assessment.latency_evidence is None
-        and data_policy.reject_missing_latency
-    ):
+    if policy == SelectionPolicy.FASTEST and assessment.latency_evidence is None and data_policy.reject_missing_latency:
         return ConstraintResult(
             passed=False,
             reason_code="fastest_missing_latency",
@@ -789,14 +745,13 @@ def _rank_key(
     policy: SelectionPolicy,
     data_policy: SelectionDataPolicy,
 ) -> tuple[object, ...]:
+    """Return a deterministic sort key for a candidate under the given policy."""
     identity = assessment.model_id
     reliability = assessment.reliability_lower_bound
     if policy == SelectionPolicy.CHEAPEST:
         return (
             assessment.expected_cost_usd is None,
-            assessment.expected_cost_usd
-            if assessment.expected_cost_usd is not None
-            else Decimal(0),
+            assessment.expected_cost_usd if assessment.expected_cost_usd is not None else Decimal(0),
             assessment.quality is None,
             -(assessment.quality or Decimal(0)),
             reliability is None,
@@ -810,9 +765,7 @@ def _rank_key(
             assessment.quality is None,
             -(assessment.quality or Decimal(0)),
             assessment.expected_cost_usd is None,
-            assessment.expected_cost_usd
-            if assessment.expected_cost_usd is not None
-            else Decimal(0),
+            assessment.expected_cost_usd if assessment.expected_cost_usd is not None else Decimal(0),
             reliability is None,
             -(reliability or Decimal(0)),
             assessment.latency_ms is None,
@@ -846,9 +799,12 @@ def _rank_key(
 
 
 def _normalize_objectives(
-    objectives: Sequence[ParetoObjective]
-    | Mapping[str, ObjectiveDirection | Literal["minimize", "maximize"]],
+    objectives: Union[
+        Sequence[ParetoObjective],
+        Mapping[str, Union[ObjectiveDirection, Literal["minimize", "maximize"]]],
+    ],
 ) -> dict[str, ObjectiveDirection]:
+    """Normalize objective specifications into a mapping of name to direction."""
     if isinstance(objectives, Mapping):
         directions = {}
         for name, direction in objectives.items():
@@ -869,19 +825,19 @@ def _normalize_objectives(
         if name not in {"quality", "reliability", "expected_cost", "latency_ms"}:
             raise SelectionError(f"unsupported Pareto objective: {objective}")
         result[name] = (
-            ObjectiveDirection.MAXIMIZE
-            if name in {"quality", "reliability"}
-            else ObjectiveDirection.MINIMIZE
+            ObjectiveDirection.MAXIMIZE if name in {"quality", "reliability"} else ObjectiveDirection.MINIMIZE
         )
     return result
 
 
 def _normalize_objective_name(name: str) -> str:
+    """Map a user-facing objective alias to its canonical name."""
     aliases = {"cost": "expected_cost", "latency": "latency_ms"}
     return aliases.get(name, name)
 
 
-def _objective_value(assessment: CandidateAssessment, objective: str) -> Decimal | None:
+def _objective_value(assessment: CandidateAssessment, objective: str) -> Optional[Decimal]:
+    """Return the candidate value for a named Pareto objective, or None if missing."""
     reliability = assessment.reliability_lower_bound
     if reliability is None:
         reliability = assessment.reliability
@@ -899,7 +855,8 @@ def _require_modalities(
     required: frozenset[str],
     available: tuple[str, ...],
     policy: SelectionDataPolicy,
-) -> None:
+):
+    """Append rejection reasons for missing or unsupported modalities."""
     if not required:
         return
     if not available:
@@ -911,9 +868,8 @@ def _require_modalities(
         reasons.append(f"unsupported {direction} modalities: {', '.join(sorted(missing))}")
 
 
-def _require_support(
-    reasons: list[str], capability: str, status: SupportStatus, policy: SelectionDataPolicy
-) -> None:
+def _require_support(reasons: list[str], capability: str, status: SupportStatus, policy: SelectionDataPolicy):
+    """Append a rejection reason when a required capability is unsupported or unknown."""
     if status == SupportStatus.UNSUPPORTED:
         reasons.append(f"{capability} is unsupported")
     elif status == SupportStatus.UNKNOWN and not policy.allow_unknown_capabilities:

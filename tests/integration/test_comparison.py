@@ -25,12 +25,16 @@ FIXTURE_DIR = Path(__file__).parents[1] / "fixtures" / "catalogs"
 @pytest.mark.asyncio
 async def test_offline_catalog_cache_can_be_compared_and_round_tripped(
     tmp_path: Path,
-) -> None:
+):
+    """[Integration] offline compare round trip: a cached catalog compares and serializes losslessly.
+
+    Scenario: Writes a cache from a fixture, reads it offline, compares models and round-trips JSON.
+    Boundaries: Real adapter, cache dir and comparison engine; fixture payload and a fallback estimator.
+    On failure, first check: offline cache reuse and ComparisonReport JSON serialization equality.
+    """
     now = datetime(2026, 1, 1, tzinfo=UTC)
     source_adapter = OpenRouterCatalogAdapter(cache_dir=tmp_path)
-    payload = json.loads(
-        (FIXTURE_DIR / "openrouter_ordinary_text.json").read_text(encoding="utf-8")
-    )
+    payload = json.loads((FIXTURE_DIR / "openrouter_ordinary_text.json").read_text(encoding="utf-8"))
     snapshot = source_adapter._parse_payload(payload, clock=now)
     source_adapter._write_cache(snapshot=snapshot, raw_payload=payload)
 
@@ -53,7 +57,13 @@ async def test_offline_catalog_cache_can_be_compared_and_round_tripped(
 
 
 @pytest.mark.integration
-def test_catalog_request_to_cost_comparison_for_synthetic_scenario() -> None:
+def test_catalog_request_to_cost_comparison_for_synthetic_scenario():
+    """[Integration] request to cost: a synthetic request produces token and cost estimates per model.
+
+    Scenario: Parses a modalities fixture and compares it against a balanced workload request.
+    Boundaries: Real adapter parsing, comparison engine and fallback estimator; fixture payload.
+    On failure, first check: token-estimate passthrough and the eligibility result for the scenario.
+    """
     profile = RequestProfile(
         task="balanced",
         explicit_input_tokens=2048,
@@ -79,7 +89,13 @@ def test_catalog_request_to_cost_comparison_for_synthetic_scenario() -> None:
 
 
 @pytest.mark.integration
-def test_comparison_includes_policy_ranks_evidence_constraints_and_pareto() -> None:
+def test_comparison_includes_policy_ranks_evidence_constraints_and_pareto():
+    """[Integration] full comparison: ranks, evidence, constraints and pareto flags are computed.
+
+    Scenario: Compares two models with observations and quality evidence under the BEST policy.
+    Boundaries: Real comparison engine and fallback estimator over fixture-derived profiles.
+    On failure, first check: per-policy ranks, attached evidence, and pareto membership on candidates.
+    """
     catalog_adapter = OpenRouterCatalogAdapter()
     snapshot = catalog_adapter._parse_payload(
         json.loads((FIXTURE_DIR / "openrouter_ordinary_text.json").read_text(encoding="utf-8")),
@@ -137,8 +153,7 @@ def test_comparison_includes_policy_ranks_evidence_constraints_and_pareto() -> N
     assert report.selected_policy == SelectionPolicy.BEST
     assert len(report.candidates) == 2
     assert all(
-        set(candidate.rank_by_policy) == {policy.value for policy in SelectionPolicy}
-        for candidate in report.candidates
+        set(candidate.rank_by_policy) == {policy.value for policy in SelectionPolicy} for candidate in report.candidates
     )
     alternative_report = next(
         candidate for candidate in report.candidates if candidate.model.identity.provider == "test"

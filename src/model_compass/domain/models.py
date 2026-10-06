@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -40,11 +40,12 @@ class ModelIdentity(BaseModel):
     provider: str
     model_id: str
     canonical_id: str
-    display_name: str | None = None
+    display_name: Optional[str] = None
 
     @field_validator("provider", "model_id", "canonical_id")
     @classmethod
     def _not_empty(cls, value: str) -> str:
+        """Reject blank identity fields."""
         if not value.strip():
             raise ValueError("identity fields must be non-empty")
         return value
@@ -57,7 +58,7 @@ class ModelEndpoint(BaseModel):
 
     provider: str
     endpoint_id: str
-    api_base_url: str | None = None
+    api_base_url: Optional[str] = None
     supports_streaming: SupportStatus = SupportStatus.UNKNOWN
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -67,8 +68,8 @@ class ModelCapabilities(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    context_length: int | None = None
-    max_output_tokens: int | None = None
+    context_length: Optional[int] = None
+    max_output_tokens: Optional[int] = None
     input_modalities: tuple[str, ...] = ()
     output_modalities: tuple[str, ...] = ()
     tools: SupportStatus = SupportStatus.UNKNOWN
@@ -98,11 +99,13 @@ class PriceComponent(BaseModel):
     @field_validator("amount", mode="before")
     @classmethod
     def _parse_amount(cls, value: object) -> Decimal:
+        """Parse the raw amount into a Decimal."""
         return parse_decimal(value)
 
     @field_validator("amount")
     @classmethod
     def _non_negative(cls, value: Decimal) -> Decimal:
+        """Reject non-finite or negative prices."""
         if not value.is_finite():
             raise ValueError("price must be a finite number")
         if value < Decimal("0"):
@@ -116,9 +119,9 @@ class PricingOverride(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
-    prompt_tokens_gte: int | None = None
-    utc_window_start: time | None = None
-    utc_window_end: time | None = None
+    prompt_tokens_gte: Optional[int] = None
+    utc_window_start: Optional[time] = None
+    utc_window_end: Optional[time] = None
     prices: dict[str, PriceComponent]
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -160,7 +163,7 @@ class Pricing(BaseModel):
         self,
         *,
         prompt_tokens: int = 0,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> dict[str, PriceComponent]:
         """Return effective pricing after applying applicable overrides."""
         resolved = dict(self.components)
@@ -179,7 +182,7 @@ class CatalogSource(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
-    source_url: str | None = None
+    source_url: Optional[str] = None
     retrieved_at: datetime
     authoritative: bool = False
     stale: bool = False

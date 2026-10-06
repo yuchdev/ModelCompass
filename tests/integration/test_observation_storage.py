@@ -5,9 +5,11 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
+from model_compass import config
 from model_compass.application import AnalyticsFacade
 from model_compass.domain import (
     BenchmarkResult,
@@ -28,11 +30,12 @@ from model_compass.storage import (
 def _observation(
     observation_id: str,
     *,
-    timestamp: datetime | None = None,
-    prompt: str | None = None,
-    response: str | None = None,
-    actual_cost: Decimal | None = None,
+    timestamp: Optional[datetime] = None,
+    prompt: Optional[str] = None,
+    response: Optional[str] = None,
+    actual_cost: Optional[Decimal] = None,
 ) -> Observation:
+    """Build an Observation with sensible defaults for store round-trip tests."""
     return Observation(
         observation_id=observation_id,
         timestamp=timestamp or datetime(2026, 1, 1, tzinfo=UTC),
@@ -49,7 +52,13 @@ def _observation(
 
 
 @pytest.mark.integration
-def test_sqlite_create_reopen_query_and_lazy_initialization(tmp_path: Path) -> None:
+def test_sqlite_create_reopen_query_and_lazy_initialization(tmp_path: Path):
+    """[Integration] sqlite lazy init: file is created only on first write, then re-openable.
+
+    Scenario: Constructs a store on a nested path, records one observation, reopens and queries it.
+    Boundaries: Real SQLite database on the temp filesystem; no mocks.
+    On failure, first check: lazy file creation and the reopen/query round-trip of actual_cost.
+    """
     path = tmp_path / "nested" / "observations.db"
     store = SQLiteObservationStore(path)
     facade = AnalyticsFacade(observation_store=store)
@@ -67,13 +76,17 @@ def test_sqlite_create_reopen_query_and_lazy_initialization(tmp_path: Path) -> N
     )
     assert rows[0].actual_cost == Decimal("0.03")
     assert rows[0].prompt is None
-    assert facade.summarize_model(
-        "provider:model", min_samples=1
-    ).cost.total_actual_cost == Decimal("0.03")
+    assert facade.summarize_model("provider:model", min_samples=1).cost.total_actual_cost == Decimal("0.03")
 
 
 @pytest.mark.integration
-def test_memory_store_contract_time_windows_and_summaries() -> None:
+def test_memory_store_contract_time_windows_and_summaries():
+    """[Integration] memory store windows: recent filter and task summary honor the time window.
+
+    Scenario: Records old and recent observations, queries with a recent window, summarizes the task.
+    Boundaries: Real in-memory store; deterministic now_utc is passed explicitly.
+    On failure, first check: recent-window filtering and the since/recent mutual-exclusion guard.
+    """
     store = InMemoryObservationStore()
     store.record_observation(_observation("old"))
     store.record_observation(_observation("recent", timestamp=datetime(2026, 1, 2, tzinfo=UTC)))
@@ -89,7 +102,13 @@ def test_memory_store_contract_time_windows_and_summaries() -> None:
 
 
 @pytest.mark.integration
-def test_sqlite_memory_bulk_deduplication_filters_deletion_and_vacuum() -> None:
+def test_sqlite_memory_bulk_deduplication_filters_deletion_and_vacuum():
+    """[Integration] sqlite bulk ops: bulk insert, dedupe, filter, summarize, delete and vacuum work.
+
+    Scenario: Exercises bulk record, deduplication, windowed queries, summaries, deletion and vacuum.
+    Boundaries: Real in-memory SQLite store; deterministic now_utc is passed explicitly.
+    On failure, first check: deduplicate handling and delete_before row counts.
+    """
     store = SQLiteObservationStore(":memory:")
     first = _observation("first")
     second = _observation("second", timestamp=datetime(2026, 1, 2, tzinfo=UTC))
@@ -98,9 +117,7 @@ def test_sqlite_memory_bulk_deduplication_filters_deletion_and_vacuum() -> None:
     assert store.record_observations([first, second]) == 2
     assert store.record_observations([first], deduplicate=True) == 0
     assert store.query_observations(limit=1) == [first]
-    assert store.query_observations(
-        recent=timedelta(days=1), now_utc=datetime(2026, 1, 2, 12, tzinfo=UTC)
-    ) == [second]
+    assert store.query_observations(recent=timedelta(days=1), now_utc=datetime(2026, 1, 2, 12, tzinfo=UTC)) == [second]
     assert store.summarize_task("summarization", min_samples=1).reliability.sample_count == 2
     assert (
         store.summarize_model(
@@ -118,7 +135,13 @@ def test_sqlite_memory_bulk_deduplication_filters_deletion_and_vacuum() -> None:
 
 
 @pytest.mark.integration
-def test_sqlite_bulk_write_rolls_back_on_failure(tmp_path: Path) -> None:
+def test_sqlite_bulk_write_rolls_back_on_failure(tmp_path: Path):
+    """[Integration] sqlite bulk rollback: a failing bulk write leaves the table empty.
+
+    Scenario: Attempts to bulk-insert two observations sharing an id, expecting an integrity error.
+    Boundaries: Real SQLite database on the temp filesystem; no mocks.
+    On failure, first check: transaction rollback so no partial rows survive the failed batch.
+    """
     store = SQLiteObservationStore(tmp_path / "observations.db")
     with pytest.raises(sqlite3.IntegrityError):
         store.record_observations([_observation("duplicate"), _observation("duplicate")])
@@ -126,7 +149,13 @@ def test_sqlite_bulk_write_rolls_back_on_failure(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_multiple_sqlite_connections_can_write_sequentially(tmp_path: Path) -> None:
+def test_multiple_sqlite_connections_can_write_sequentially(tmp_path: Path):
+    """[Integration] shared sqlite file: two stores on one file write and read each other's rows.
+
+    Scenario: Opens two stores on the same path, writes from each, reads the combined rows.
+    Boundaries: Real SQLite database on the temp filesystem; no mocks.
+    On failure, first check: connection isolation or locking preventing sequential writes.
+    """
     path = tmp_path / "observations.db"
     first = SQLiteObservationStore(path)
     second = SQLiteObservationStore(path)
@@ -136,7 +165,13 @@ def test_multiple_sqlite_connections_can_write_sequentially(tmp_path: Path) -> N
 
 
 @pytest.mark.integration
-def test_version_zero_migrates_and_future_schema_is_rejected(tmp_path: Path) -> None:
+def test_version_zero_migrates_and_future_schema_is_rejected(tmp_path: Path):
+    """[Integration] schema guards: v0 migrates forward while future/corrupt versions are rejected.
+
+    Scenario: Seeds databases at schema versions 0, 999, invalid and incomplete and opens each.
+    Boundaries: Real SQLite databases seeded directly via sqlite3; no mocks.
+    On failure, first check: migration from version 0 and the version validation error branches.
+    """
     legacy_path = tmp_path / "legacy.db"
     with sqlite3.connect(legacy_path) as connection:
         connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -144,9 +179,7 @@ def test_version_zero_migrates_and_future_schema_is_rejected(tmp_path: Path) -> 
     migrated = SQLiteObservationStore(legacy_path)
     assert migrated.query_observations() == []
     with sqlite3.connect(legacy_path) as connection:
-        version = connection.execute(
-            "SELECT value FROM metadata WHERE key = 'schema_version'"
-        ).fetchone()[0]
+        version = connection.execute("SELECT value FROM metadata WHERE key = 'schema_version'").fetchone()[0]
     assert version == "2"
 
     unsupported_path = tmp_path / "future.db"
@@ -172,7 +205,13 @@ def test_version_zero_migrates_and_future_schema_is_rejected(tmp_path: Path) -> 
 
 
 @pytest.mark.integration
-def test_version_one_moves_payloads_out_of_observation_table(tmp_path: Path) -> None:
+def test_version_one_moves_payloads_out_of_observation_table(tmp_path: Path):
+    """[Integration] v1 payload migration: prompt/response columns move to the payload table.
+
+    Scenario: Builds a v1 database with inline payload columns, reopens it and inspects the schema.
+    Boundaries: Real SQLite database seeded directly via sqlite3; no mocks.
+    On failure, first check: the migration moving prompt/response out of the observations table.
+    """
     path = tmp_path / "legacy-payloads.db"
     store = SQLiteObservationStore(path, payload_policy=PayloadPolicy.FULL)
     store.record_observation(_observation("legacy"))
@@ -180,9 +219,7 @@ def test_version_one_moves_payloads_out_of_observation_table(tmp_path: Path) -> 
         connection.execute("DELETE FROM observation_payloads")
         connection.execute("ALTER TABLE observations ADD COLUMN prompt TEXT")
         connection.execute("ALTER TABLE observations ADD COLUMN response TEXT")
-        connection.execute(
-            "UPDATE observations SET prompt = 'legacy prompt', response = 'legacy response'"
-        )
+        connection.execute("UPDATE observations SET prompt = 'legacy prompt', response = 'legacy response'")
         connection.execute("UPDATE metadata SET value = '1' WHERE key = 'schema_version'")
 
     migrated = SQLiteObservationStore(path, payload_policy=PayloadPolicy.FULL)
@@ -196,11 +233,15 @@ def test_version_one_moves_payloads_out_of_observation_table(tmp_path: Path) -> 
 
 
 @pytest.mark.integration
-def test_export_import_round_trip_and_bad_line_number(tmp_path: Path) -> None:
+def test_export_import_round_trip_and_bad_line_number(tmp_path: Path):
+    """[Integration] jsonl round trip: export then import reproduces records and flags bad lines.
+
+    Scenario: Exports observations and benchmark records, re-imports them and feeds malformed lines.
+    Boundaries: Real SQLite databases on the temp filesystem; no mocks.
+    On failure, first check: export determinism, payload redaction, and import line-number errors.
+    """
     source = SQLiteObservationStore(tmp_path / "source.db")
-    source.record_observation(
-        _observation("one", prompt="secret text", actual_cost=Decimal("0.0000001"))
-    )
+    source.record_observation(_observation("one", prompt="secret text", actual_cost=Decimal("0.0000001")))
     source.record_benchmark_run(
         BenchmarkRun(
             run_id="run-1",
@@ -238,7 +279,13 @@ def test_export_import_round_trip_and_bad_line_number(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_benchmark_run_and_quality_evidence_are_persisted(tmp_path: Path) -> None:
+def test_benchmark_run_and_quality_evidence_are_persisted(tmp_path: Path):
+    """[Integration] benchmark persistence: runs and quality evidence survive a write/read cycle.
+
+    Scenario: Records a benchmark run and a quality evidence row, then queries them back.
+    Boundaries: Real SQLite database on the temp filesystem; no mocks.
+    On failure, first check: benchmark run and quality evidence serialization round-trip.
+    """
     store = SQLiteObservationStore(tmp_path / "evidence.db")
     run = BenchmarkRun(
         run_id="run",
@@ -263,7 +310,13 @@ def test_benchmark_run_and_quality_evidence_are_persisted(tmp_path: Path) -> Non
 
 
 @pytest.mark.integration
-def test_import_reports_line_number_and_rolls_back_prior_records(tmp_path: Path) -> None:
+def test_import_reports_line_number_and_rolls_back_prior_records(tmp_path: Path):
+    """[Integration] import rollback: a duplicate on line 2 rolls back the earlier imported record.
+
+    Scenario: Imports a file whose second line duplicates the first and checks the table stays empty.
+    Boundaries: Real in-memory and SQLite stores on the temp filesystem; no mocks.
+    On failure, first check: the import transaction rolling back prior rows on a mid-file failure.
+    """
     source = InMemoryObservationStore()
     source.record_observation(_observation("one"))
     record = source.export_jsonl().strip()
@@ -274,7 +327,13 @@ def test_import_reports_line_number_and_rolls_back_prior_records(tmp_path: Path)
 
 
 @pytest.mark.integration
-def test_memory_backend_deduplication_and_benchmark_records() -> None:
+def test_memory_backend_deduplication_and_benchmark_records():
+    """[Integration] memory backend contract: dedupe and uniqueness guards hold across record types.
+
+    Scenario: Records duplicated observations, benchmark runs, results and evidence into the store.
+    Boundaries: Real in-memory store; no mocks.
+    On failure, first check: deduplicate flag behavior and the uniqueness ValueError branches.
+    """
     store = InMemoryObservationStore()
     row = _observation("row")
     assert store.record_observations([]) == 0
@@ -317,22 +376,28 @@ def test_memory_backend_deduplication_and_benchmark_records() -> None:
 
 
 @pytest.mark.integration
-def test_application_construction_does_not_create_default_database(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from model_compass import config
+def test_application_construction_does_not_create_default_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """[Integration] no default db on construct: facade creation touches no disk.
 
+    Scenario: Patches the data dir then constructs an AnalyticsFacade with no arguments.
+    Boundaries: Real AnalyticsFacade and filesystem; only the data-dir lookup is patched.
+    On failure, first check: AnalyticsFacade eagerly creating its default store at construct time.
+    """
     monkeypatch.setattr(config, "user_data_dir", lambda *args: str(tmp_path / "data"))
     AnalyticsFacade()
     assert not (tmp_path / "data").exists()
 
 
 @pytest.mark.integration
-def test_payload_policy_hashes_or_explicitly_persists_prompt(tmp_path: Path) -> None:
+def test_payload_policy_hashes_or_explicitly_persists_prompt(tmp_path: Path):
+    """[Integration] payload policy: HASH_ONLY fingerprints prompts while FULL persists them.
+
+    Scenario: Records the same observation under HASH_ONLY and FULL payload policies and inspects it.
+    Boundaries: Real SQLite databases on the temp filesystem; no mocks.
+    On failure, first check: fingerprint length under HASH_ONLY and prompt persistence under FULL.
+    """
     raw = _observation("payload", prompt="sensitive", response="sensitive response")
-    hash_store = SQLiteObservationStore(
-        tmp_path / "hash.db", payload_policy=PayloadPolicy.HASH_ONLY
-    )
+    hash_store = SQLiteObservationStore(tmp_path / "hash.db", payload_policy=PayloadPolicy.HASH_ONLY)
     hashed = hash_store.record_observation(raw)
     assert hashed.request_fingerprint is not None
     assert len(hashed.request_fingerprint) == 64

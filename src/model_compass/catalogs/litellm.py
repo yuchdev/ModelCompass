@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Optional
 
 from model_compass.domain import (
     CatalogSnapshot,
@@ -29,13 +30,14 @@ class LiteLLMCatalogAdapter:
         *,
         force: bool = False,
         offline: bool = False,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> CatalogSnapshot:
+        """Build a catalog snapshot from LiteLLM's bundled model_cost metadata."""
         del force, offline
         clock = now_utc or datetime.now(UTC)
 
         try:
-            import litellm
+            litellm = importlib.import_module("litellm")
         except ImportError as exc:
             raise DependencyError("LiteLLM is required for LiteLLM catalog adapter") from exc
 
@@ -99,9 +101,7 @@ class LiteLLMCatalogAdapter:
                     provider=provider,
                     model_id=normalized_model_id,
                     canonical_id=canonical_id,
-                    display_name=payload.get("display_name")
-                    if isinstance(payload.get("display_name"), str)
-                    else None,
+                    display_name=payload.get("display_name") if isinstance(payload.get("display_name"), str) else None,
                 ),
                 endpoints=(
                     ModelEndpoint(
@@ -135,6 +135,7 @@ class LiteLLMCatalogAdapter:
 
 
 def _normalize_provider_model(model_name: str) -> tuple[str, str]:
+    """Split a LiteLLM model_cost key into (provider, model_id)."""
     normalized = model_name.strip()
     if "/" not in normalized:
         return "litellm", normalized
@@ -145,7 +146,8 @@ def _normalize_provider_model(model_name: str) -> tuple[str, str]:
     return prefix.lower(), remainder
 
 
-def _as_int(value: object) -> int | None:
+def _as_int(value: object) -> Optional[int]:
+    """Coerce a numeric-looking value to int, or None if it isn't one."""
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.strip().isdigit():

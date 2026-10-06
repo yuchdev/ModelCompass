@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import tempfile
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import httpx
+from pydantic import ValidationError
 
-from model_compass import __version__
+from model_compass._version import __version__
 from model_compass.config import default_paths
 from model_compass.domain import (
     KNOWN_OPENROUTER_PRICE_KEYS,
@@ -35,6 +37,8 @@ _CACHE_VERSION = 1
 _DEFAULT_BASE_URL = "https://openrouter.ai"
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
 
+_logger = logging.getLogger(__name__)
+
 
 class OpenRouterCatalogAdapter:
     """Fetch and normalize OpenRouter model catalog."""
@@ -43,14 +47,15 @@ class OpenRouterCatalogAdapter:
         self,
         *,
         base_url: str = _DEFAULT_BASE_URL,
-        api_key: str | None = None,
+        api_key: Optional[str] = None,
         timeout: httpx.Timeout = _DEFAULT_TIMEOUT,
-        cache_dir: Path | None = None,
+        cache_dir: Optional[Path] = None,
         ttl: timedelta = timedelta(hours=6),
         retries: int = 0,
         retry_backoff_seconds: float = 0.25,
-        client: httpx.AsyncClient | None = None,
-    ) -> None:
+        client: Optional[httpx.AsyncClient] = None,
+    ):
+        """Configure endpoint, credentials, cache location, and retry policy."""
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
@@ -65,7 +70,7 @@ class OpenRouterCatalogAdapter:
         *,
         force: bool = False,
         offline: bool = False,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> CatalogSnapshot:
         """Refresh from OpenRouter or cache."""
         clock = now_utc or datetime.now(UTC)
@@ -76,11 +81,7 @@ class OpenRouterCatalogAdapter:
                 raise CatalogCacheError("offline mode enabled but no cache snapshot is available")
             return _mark_stale_if_needed(cache, now=clock, ttl=self._ttl)
 
-        if (
-            not force
-            and cache is not None
-            and not _is_expired(cache.retrieved_at, now=clock, ttl=self._ttl)
-        ):
+        if not force and cache is not None and not _is_expired(cache.retrieved_at, now=clock, ttl=self._ttl):
             return cache
 
         try:
@@ -96,6 +97,7 @@ class OpenRouterCatalogAdapter:
             return snapshot
 
     async def _fetch_models(self) -> dict[str, Any]:
+        """Fetch the raw model catalog payload from the OpenRouter API."""
         url = f"{self._base_url}/api/v1/models"
         headers = {
             "User-Agent": f"model-compass/{__version__}",
@@ -105,7 +107,7 @@ class OpenRouterCatalogAdapter:
             headers["Authorization"] = "Bearer " + self._api_key
 
         attempts = self._retries + 1
-        last_exc: Exception | None = None
+        last_exc: Optional[Exception] = None
 
         for attempt in range(attempts):
             try:
@@ -122,19 +124,13 @@ class OpenRouterCatalogAdapter:
                 break
 
             if response.status_code in {401, 403}:
-                raise CatalogFetchError(
-                    f"OpenRouter returned HTTP {response.status_code} for catalog request"
-                )
+                raise CatalogFetchError(f"OpenRouter returned HTTP {response.status_code} for catalog request")
             if response.status_code == 429:
                 raise CatalogFetchError("OpenRouter rate limited catalog request (HTTP 429)")
             if response.status_code >= 500:
-                raise CatalogFetchError(
-                    f"OpenRouter server error during catalog request: HTTP {response.status_code}"
-                )
+                raise CatalogFetchError(f"OpenRouter server error during catalog request: HTTP {response.status_code}")
             if response.status_code >= 400:
-                raise CatalogFetchError(
-                    f"OpenRouter catalog request failed: HTTP {response.status_code}"
-                )
+                raise CatalogFetchError(f"OpenRouter catalog request failed: HTTP {response.status_code}")
 
             try:
                 payload = response.json()
@@ -150,6 +146,7 @@ class OpenRouterCatalogAdapter:
         raise CatalogFetchError("failed to fetch OpenRouter catalog")
 
     def _parse_payload(self, payload: dict[str, Any], *, clock: datetime) -> CatalogSnapshot:
+        """Parse a raw catalog payload into a normalized snapshot."""
         data = payload.get("data")
         if not isinstance(data, list):
             raise CatalogParseError("OpenRouter catalog top-level 'data' must be a list")
@@ -185,6 +182,7 @@ class OpenRouterCatalogAdapter:
         )
 
     def _parse_model(self, entry: dict[str, Any], *, clock: datetime) -> ModelProfile:
+        """Parse a single catalog entry into a normalized model profile."""
         model_id = str(entry["id"]).strip()
         if not model_id:
             raise ValueError("missing model id")
@@ -229,9 +227,11 @@ class OpenRouterCatalogAdapter:
         )
 
     def _cache_file(self) -> Path:
+        """Return the path to the cached catalog JSON file."""
         return self._cache_dir / "openrouter_catalog.json"
 
-    def _load_cache(self, *, offline: bool) -> CatalogSnapshot | None:
+    def _load_cache(self, *, offline: bool) -> Optional[CatalogSnapshot]:
+        """Load and parse the cached catalog snapshot, if present and readable."""
         cache_path = self._cache_file()
         if not cache_path.exists():
             return None
@@ -242,16 +242,15 @@ class OpenRouterCatalogAdapter:
                 raise TypeError("cache must be a JSON object")
             snapshot_data = payload["snapshot"]
             snapshot = CatalogSnapshot.model_validate(snapshot_data)
-        except Exception as exc:
+        except (json.JSONDecodeError, KeyError, TypeError, ValidationError) as exc:
             if offline:
-                raise CatalogCacheError(
-                    "catalog cache is corrupt and offline mode forbids refresh"
-                ) from exc
+                raise CatalogCacheError("catalog cache is corrupt and offline mode forbids refresh") from exc
             return None
         else:
             return snapshot
 
-    def _write_cache(self, *, snapshot: CatalogSnapshot, raw_payload: dict[str, Any]) -> None:
+    def _write_cache(self, *, snapshot: CatalogSnapshot, raw_payload: dict[str, Any]):
+        """Persist the raw payload and normalized snapshot to the cache file."""
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         destination = self._cache_file()
         payload = {
@@ -278,6 +277,7 @@ class OpenRouterCatalogAdapter:
 
 
 def _build_capabilities(entry: dict[str, Any]) -> ModelCapabilities:
+    """Build normalized capabilities from a raw OpenRouter catalog entry."""
     raw_architecture = entry.get("architecture")
     architecture: dict[str, Any] = raw_architecture if isinstance(raw_architecture, dict) else {}
 
@@ -327,6 +327,7 @@ def _build_capabilities(entry: dict[str, Any]) -> ModelCapabilities:
 
 
 def _build_pricing(pricing_payload: object, overrides_payload: object) -> Pricing:
+    """Build normalized pricing, preserving unknown provider keys as extra components."""
     components: dict[str, PriceComponent] = {}
     unknown_components: dict[str, PriceComponent] = {}
     source_by_key: dict[str, str] = {}
@@ -351,9 +352,7 @@ def _build_pricing(pricing_payload: object, overrides_payload: object) -> Pricin
             if not isinstance(raw_prices, dict):
                 continue
             normalized_prices = {
-                key: PriceComponent(key=key, amount=value)
-                for key, value in raw_prices.items()
-                if value is not None
+                key: PriceComponent(key=key, amount=value) for key, value in raw_prices.items() if value is not None
             }
             overrides.append(
                 PricingOverride(
@@ -385,9 +384,8 @@ def _build_pricing(pricing_payload: object, overrides_payload: object) -> Pricin
     )
 
 
-def _mark_stale_if_needed(
-    snapshot: CatalogSnapshot, *, now: datetime, ttl: timedelta
-) -> CatalogSnapshot:
+def _mark_stale_if_needed(snapshot: CatalogSnapshot, *, now: datetime, ttl: timedelta) -> CatalogSnapshot:
+    """Return the snapshot marked stale when its age exceeds the TTL."""
     stale = _is_expired(snapshot.retrieved_at, now=now, ttl=ttl)
     if not stale:
         return snapshot
@@ -395,10 +393,12 @@ def _mark_stale_if_needed(
 
 
 def _is_expired(retrieved_at: datetime, *, now: datetime, ttl: timedelta) -> bool:
+    """Return whether the retrieval time is older than the TTL relative to now."""
     return now - retrieved_at > ttl
 
 
 def _bool_to_support(value: object) -> SupportStatus:
+    """Map a boolean-ish value to a tri-state support status."""
     if value is True:
         return SupportStatus.SUPPORTED
     if value is False:
@@ -407,12 +407,14 @@ def _bool_to_support(value: object) -> SupportStatus:
 
 
 def _as_str_list(value: object) -> list[str]:
+    """Coerce a value into a list of strings, ignoring non-scalar items."""
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, (str, int))]
 
 
-def _as_int(value: object) -> int | None:
+def _as_int(value: object) -> Optional[int]:
+    """Coerce a value into an int when possible, otherwise return None."""
     if value is None:
         return None
     if isinstance(value, int):
@@ -421,11 +423,13 @@ def _as_int(value: object) -> int | None:
         try:
             return int(value)
         except ValueError:
+            _logger.debug("Ignoring unparseable integer value: %r", value)
             return None
     return None
 
 
-def _as_time(value: object) -> time | None:
+def _as_time(value: object) -> Optional[time]:
+    """Coerce a value into a time when possible, otherwise return None."""
     if value is None:
         return None
     if isinstance(value, time):
@@ -434,11 +438,13 @@ def _as_time(value: object) -> time | None:
         try:
             return time.fromisoformat(value)
         except ValueError:
+            _logger.debug("Ignoring unparseable time value: %r", value)
             return None
     return None
 
 
-def _read_str(payload: dict[str, Any], key: str) -> str | None:
+def _read_str(payload: dict[str, Any], key: str) -> Optional[str]:
+    """Return a non-empty string value for a key, otherwise None."""
     value = payload.get(key)
     if isinstance(value, str) and value.strip():
         return value
@@ -450,6 +456,7 @@ def _flag_from_modalities(
     input_modalities: tuple[str, ...],
     output_modalities: tuple[str, ...],
 ) -> SupportStatus:
+    """Infer a modality support flag from declared input and output modalities."""
     if name in input_modalities or name in output_modalities:
         return SupportStatus.SUPPORTED
     return SupportStatus.UNKNOWN

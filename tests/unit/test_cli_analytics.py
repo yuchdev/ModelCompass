@@ -36,14 +36,11 @@ cli_app_module = importlib.import_module("model_compass.cli.app")
 
 
 def _profile() -> ModelProfile:
+    """Build a small text-capable model profile fixture used across the CLI tests."""
     now = datetime(2026, 1, 1, tzinfo=UTC)
     return ModelProfile(
-        identity=ModelIdentity(
-            provider="test", model_id="small", canonical_id="test:small", display_name="Small"
-        ),
-        capabilities=ModelCapabilities(
-            context_length=1000, input_modalities=("text",), output_modalities=("text",)
-        ),
+        identity=ModelIdentity(provider="test", model_id="small", canonical_id="test:small", display_name="Small"),
+        capabilities=ModelCapabilities(context_length=1000, input_modalities=("text",), output_modalities=("text",)),
         pricing=Pricing(
             components={
                 "prompt": PriceComponent(key="prompt", amount=Decimal("0.000001")),
@@ -57,7 +54,13 @@ def _profile() -> ModelProfile:
 @pytest.mark.unit
 def test_models_json_lists_decimal_pricing_without_rich_markup(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
+    """[E2E] Models json lists decimal pricing without rich markup: verifies the described behaviour holds.
+
+    Scenario: Exercises models json lists decimal pricing without rich markup and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
     snapshot = CatalogSnapshot(
         models={profile.identity.canonical_id: profile},
@@ -76,12 +79,16 @@ def test_models_json_lists_decimal_pricing_without_rich_markup(
 
 
 @pytest.mark.unit
-def test_select_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Select table and catalog error: verifies the described behaviour holds.
+
+    Scenario: Exercises select table and catalog error and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
     fake = SimpleNamespace(
-        catalog=SimpleNamespace(
-            refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile})
-        ),
+        catalog=SimpleNamespace(refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile})),
         select=lambda profiles, request, *, policy: select_model(profiles, request, policy=policy),
     )
     monkeypatch.setattr(cli_app_module, "analytics", fake)
@@ -89,7 +96,8 @@ def test_select_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch) -> None
     assert result.exit_code == 0
     assert "Model selection" in result.output
 
-    def fail(**kwargs: object) -> None:
+    def fail(**kwargs: object):
+        """Raise a catalog error to simulate an offline refresh failure."""
         raise ModelCompassError("offline catalog missing")
 
     monkeypatch.setattr(
@@ -103,7 +111,13 @@ def test_select_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_models_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_models_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Models table and catalog error: verifies the described behaviour holds.
+
+    Scenario: Exercises models table and catalog error and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
     snapshot = SimpleNamespace(models={"test:small": profile})
     fake = SimpleNamespace(catalog=SimpleNamespace(refresh=lambda **kwargs: snapshot))
@@ -112,25 +126,30 @@ def test_models_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch) -> None
     assert table.exit_code == 0
     assert "Available models" in table.output
 
-    def fail(**kwargs: object) -> None:
+    def fail(**kwargs: object):
+        """Raise a catalog error to simulate an unavailable catalog refresh."""
         raise ModelCompassError("catalog unavailable")
 
-    monkeypatch.setattr(
-        cli_app_module, "analytics", SimpleNamespace(catalog=SimpleNamespace(refresh=fail))
-    )
+    monkeypatch.setattr(cli_app_module, "analytics", SimpleNamespace(catalog=SimpleNamespace(refresh=fail)))
     failed = runner.invoke(app, ["models"])
     assert failed.exit_code == 1
     assert "Unable to load catalog: catalog unavailable" in failed.output
 
 
 @pytest.mark.unit
-def test_select_json_returns_explanation_and_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_json_returns_explanation_and_policy(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Select json returns explanation and policy: verifies the described behaviour holds.
+
+    Scenario: Exercises select json returns explanation and policy and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
 
     class FakeAnalytics:
-        catalog = SimpleNamespace(
-            refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile})
-        )
+        """Analytics facade double exposing a static catalog and real selection."""
+
+        catalog = SimpleNamespace(refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile}))
 
         @staticmethod
         def select(
@@ -139,6 +158,7 @@ def test_select_json_returns_explanation_and_policy(monkeypatch: pytest.MonkeyPa
             *,
             policy: SelectionPolicy,
         ) -> SelectionResult:
+            """Delegate to the real select_model with the given policy."""
             return select_model(profiles, request, policy=policy)
 
     monkeypatch.setattr(cli_app_module, "analytics", FakeAnalytics())
@@ -166,7 +186,13 @@ def test_select_json_returns_explanation_and_policy(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_observations_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_observations_cli_json(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Observations cli json: verifies the described behaviour holds.
+
+    Scenario: Exercises observations cli json and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     item = Observation(
         model_id="test:small",
         task="general",
@@ -186,6 +212,7 @@ def test_observations_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Execution observations" in table.output
 
     def fail(**kwargs: object) -> list[Observation]:
+        """Raise a catalog error to simulate an unavailable observation store."""
         raise ModelCompassError("database unavailable")
 
     monkeypatch.setattr(cli_app_module, "analytics", SimpleNamespace(list_observations=fail))
@@ -195,7 +222,13 @@ def test_observations_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_estimate_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_estimate_cli_json(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Estimate cli json: verifies the described behaviour holds.
+
+    Scenario: Exercises estimate cli json and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
     snapshot = SimpleNamespace(models={"test:small": profile})
     monkeypatch.setattr(
@@ -222,7 +255,13 @@ def test_estimate_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_estimate_table_and_missing_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_estimate_table_and_missing_model(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Estimate table and missing model: verifies the described behaviour holds.
+
+    Scenario: Exercises estimate table and missing model and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
     snapshot = SimpleNamespace(models={"test:small": profile})
     monkeypatch.setattr(
@@ -253,7 +292,13 @@ def test_estimate_table_and_missing_model(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
-def test_pareto_cli_json_reports_objectives(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pareto_cli_json_reports_objectives(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Pareto cli json reports objectives: verifies the described behaviour holds.
+
+    Scenario: Exercises pareto cli json reports objectives and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     candidate = CandidateAssessment(
         model_id="test:small",
         eligible=True,
@@ -273,7 +318,13 @@ def test_pareto_cli_json_reports_objectives(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_pareto_table_and_invalid_objective(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pareto_table_and_invalid_objective(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Pareto table and invalid objective: verifies the described behaviour holds.
+
+    Scenario: Exercises pareto table and invalid objective and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     candidate = CandidateAssessment(
         model_id="test:small",
         eligible=True,
@@ -294,7 +345,13 @@ def test_pareto_table_and_invalid_objective(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_benchmark_cli_evaluates_json_files(tmp_path: Path) -> None:
+def test_benchmark_cli_evaluates_json_files(tmp_path: Path):
+    """[E2E] Benchmark cli evaluates json files: verifies the described behaviour holds.
+
+    Scenario: Exercises benchmark cli evaluates json files and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     dataset_file = tmp_path / "dataset.json"
     output_file = tmp_path / "outputs.json"
     dataset_file.write_text(
@@ -303,9 +360,7 @@ def test_benchmark_cli_evaluates_json_files(tmp_path: Path) -> None:
                 "name": "tiny",
                 "task": "qa",
                 "evaluator": "exact",
-                "cases": [
-                    {"case_id": "one", "input_text": "question", "expected_output": "answer"}
-                ],
+                "cases": [{"case_id": "one", "input_text": "question", "expected_output": "answer"}],
             }
         ),
         encoding="utf-8",
@@ -347,9 +402,13 @@ def test_benchmark_cli_evaluates_json_files(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_benchmark_cli_can_persist_quality_evidence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_benchmark_cli_can_persist_quality_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Benchmark cli can persist quality evidence: verifies the described behaviour holds.
+
+    Scenario: Exercises benchmark cli can persist quality evidence and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     dataset_file = tmp_path / "dataset.json"
     output_file = tmp_path / "outputs.json"
     dataset_file.write_text(
@@ -382,12 +441,16 @@ def test_benchmark_cli_can_persist_quality_evidence(
 
 
 @pytest.mark.unit
-def test_benchmark_cli_rejects_invalid_output_file(tmp_path: Path) -> None:
+def test_benchmark_cli_rejects_invalid_output_file(tmp_path: Path):
+    """[E2E] Benchmark cli rejects invalid output file: verifies the described behaviour holds.
+
+    Scenario: Exercises benchmark cli rejects invalid output file and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     dataset_file = tmp_path / "dataset.json"
     output_file = tmp_path / "outputs.json"
-    dataset_file.write_text(
-        '{"name":"d","task":"t","evaluator":"exact","cases":[]}', encoding="utf-8"
-    )
+    dataset_file.write_text('{"name":"d","task":"t","evaluator":"exact","cases":[]}', encoding="utf-8")
     output_file.write_text('["not", "an object"]', encoding="utf-8")
     result = runner.invoke(
         app,
@@ -408,10 +471,20 @@ def test_benchmark_cli_rejects_invalid_output_file(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_run_cli_reads_prompt_from_stdin_without_rich_markup(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
+    """[E2E] Run cli reads prompt from stdin without rich markup: verifies the described behaviour holds.
+
+    Scenario: Exercises run cli reads prompt from stdin without rich markup and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
+
     class FakeAnalytics:
+        """Analytics facade double whose execute returns a fixed completion result."""
+
         @staticmethod
         async def execute(request: CompletionRequest) -> ExecutionResult:
+            """Assert the prompt was forwarded and return a canned result."""
             assert request.messages[0]["content"] == "private prompt"
             return ExecutionResult(
                 model_id=request.model_id,
@@ -429,14 +502,23 @@ def test_run_cli_reads_prompt_from_stdin_without_rich_markup(
 @pytest.mark.unit
 def test_run_cli_handles_missing_prompt_and_execution_error(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
+    """[E2E] Run cli handles missing prompt and execution error: verifies the described behaviour holds.
+
+    Scenario: Exercises run cli handles missing prompt and execution error and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     no_prompt = runner.invoke(app, ["run", "--model", "test:model"])
     assert no_prompt.exit_code == 2
     assert "Provide a prompt on stdin" in no_prompt.output
 
     class FailingAnalytics:
+        """Analytics facade double whose execute always raises an execution error."""
+
         @staticmethod
         async def execute(request: CompletionRequest) -> ExecutionResult:
+            """Raise a model error to simulate a provider failure during execution."""
             raise ModelCompassError("provider unavailable")
 
     monkeypatch.setattr(cli_app_module, "analytics", FailingAnalytics())
@@ -446,7 +528,13 @@ def test_run_cli_handles_missing_prompt_and_execution_error(
 
 
 @pytest.mark.unit
-def test_select_invalid_decimal_returns_actionable_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_invalid_decimal_returns_actionable_error(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Select invalid decimal returns actionable error: verifies the described behaviour holds.
+
+    Scenario: Exercises select invalid decimal returns actionable error and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     monkeypatch.setattr(cli_app_module, "analytics", SimpleNamespace())
     result = runner.invoke(app, ["select", "--max-cost", "not-money"])
     assert result.exit_code == 1
@@ -454,19 +542,26 @@ def test_select_invalid_decimal_returns_actionable_error(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
-def test_select_accepts_modality_and_context_options(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_accepts_modality_and_context_options(monkeypatch: pytest.MonkeyPatch):
+    """[E2E] Select accepts modality and context options: verifies the described behaviour holds.
+
+    Scenario: Exercises select accepts modality and context options and asserts the expected outcome.
+    Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile()
     seen: list[RequestProfile] = []
 
     class FakeAnalytics:
-        catalog = SimpleNamespace(
-            refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile})
-        )
+        """Analytics facade double that records each request and runs real selection."""
+
+        catalog = SimpleNamespace(refresh=lambda **kwargs: SimpleNamespace(models={"test:small": profile}))
 
         @staticmethod
         def select(
             profiles: list[ModelProfile], request: RequestProfile, *, policy: SelectionPolicy
         ) -> SelectionResult:
+            """Capture the request and delegate to the real select_model."""
             seen.append(request)
             return select_model(profiles, request, policy=policy)
 

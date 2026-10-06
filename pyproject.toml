@@ -38,11 +38,13 @@ model-compass = "model_compass.cli:app"
 
 [dependency-groups]
 dev = [
+    "flakeforge==1.1.0",
     "hypothesis>=6.0",
     "mypy>=1.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
+    "release-saga==1.2.0",
     "respx>=0.21",
     "ruff>=0.7",
 ]

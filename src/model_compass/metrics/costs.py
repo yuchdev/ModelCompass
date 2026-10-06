@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,7 +32,7 @@ class CostEstimate(BaseModel):
 
     total: Decimal = Field(ge=0)
     components: tuple[CostComponentEstimate, ...] = ()
-    pricing_source: str | None = None
+    pricing_source: Optional[str] = None
     token_estimate: TokenEstimate
     assumptions: tuple[str, ...] = ()
     complete: bool
@@ -43,9 +44,9 @@ def estimate_cost(
     *,
     cached_input_read_tokens: int = 0,
     cached_input_write_tokens: int = 0,
-    reasoning_tokens: int | None = None,
-    unit_usage: Mapping[str, Decimal | int] | None = None,
-    now_utc: datetime | None = None,
+    reasoning_tokens: Optional[int] = None,
+    unit_usage: Optional[Mapping[str, Union[Decimal, int]]] = None,
+    now_utc: Optional[datetime] = None,
 ) -> CostEstimate:
     """Estimate cost; missing prices for used components make it incomplete."""
     usage_values = {
@@ -117,10 +118,7 @@ def estimate_cost(
 
     for component in components:
         total += component.cost_usd
-    sources = {
-        model.pricing.provenance.source_by_key.get(component.component, "catalog")
-        for component in components
-    }
+    sources = {model.pricing.provenance.source_by_key.get(component.component, "catalog") for component in components}
     pricing_source = ", ".join(sorted(sources)) if sources else None
 
     for key, usage in usage_values.items():
@@ -145,10 +143,11 @@ def estimate_cost(
 def _add_priced_usage(
     key: str,
     usage: Decimal,
-    price: PriceComponent | None,
+    price: Optional[PriceComponent],
     components: list[CostComponentEstimate],
     assumptions: list[str],
 ) -> bool:
+    """Append a priced usage component and return whether one was added."""
     if usage <= 0 or price is None:
         return True
     if price.currency.upper() != "USD":

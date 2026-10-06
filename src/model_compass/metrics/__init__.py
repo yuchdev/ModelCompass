@@ -1,7 +1,7 @@
 """Token, request-cost, and empirical observation metrics."""
 
 from collections.abc import Iterable
-from typing import overload
+from typing import Optional, Union, overload
 
 from model_compass.domain import Observation as StoredObservation
 from model_compass.metrics.costs import CostComponentEstimate, CostEstimate, estimate_cost
@@ -33,24 +33,24 @@ from model_compass.metrics.tokens import (
 
 
 @overload
-def summarize_observations(
-    data: Iterable[StoredObservation], *, min_samples: int = 5
-) -> ObservationSummary: ...
+def summarize_observations(data: Iterable[StoredObservation], *, min_samples: int = 5) -> ObservationSummary:
+    """Summarize persisted stored observations."""
+    ...
 
 
 @overload
-def summarize_observations(
-    data: str, task: str, observations: list[Observation]
-) -> MetricSummary | None: ...
+def summarize_observations(data: str, task: str, observations: list[Observation]) -> Optional[MetricSummary]:
+    """Summarize exact-task selection observations for one model."""
+    ...
 
 
 def summarize_observations(
-    data: Iterable[StoredObservation] | str,
-    task: str | None = None,
-    observations: list[Observation] | None = None,
+    data: Union[Iterable[StoredObservation], str],
+    task: Optional[str] = None,
+    observations: Optional[list[Observation]] = None,
     *,
     min_samples: int = 5,
-) -> ObservationSummary | MetricSummary | None:
+) -> Optional[Union[ObservationSummary, MetricSummary]]:
     """Summarize persisted records or exact-task selection observations."""
     if isinstance(data, str):
         if task is None or observations is None:

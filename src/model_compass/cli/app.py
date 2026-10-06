@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import platform
 import sys
@@ -10,7 +11,7 @@ from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
@@ -48,7 +49,7 @@ class OutputFormat(StrEnum):
 
 
 @app.command()
-def version() -> None:
+def version():
     """Print the installed package version."""
     console.print(__version__)
 
@@ -59,17 +60,16 @@ def doctor(
         OutputFormat,
         typer.Option("--format", help="Output format: table or json"),
     ] = OutputFormat.table,
-) -> None:
+):
     """Report environment health and configuration."""
     paths = default_paths()
 
     litellm_ok = False
-    litellm_error: str | None = None
+    litellm_error: Optional[str] = None
     try:
-        import litellm  # noqa: F401
-
+        importlib.import_module("litellm")
         litellm_ok = True
-    except Exception as exc:
+    except ImportError as exc:
         litellm_error = str(exc)
 
     data = {
@@ -111,7 +111,7 @@ def models(
         OutputFormat, typer.Option("--format", help="Output format: table or json")
     ] = OutputFormat.table,
     offline: Annotated[bool, typer.Option(help="Use the cached OpenRouter catalog only")] = False,
-) -> None:
+):
     """List normalized OpenRouter models."""
     try:
         snapshot = analytics.catalog.refresh(offline=offline, include_litellm=False)
@@ -125,10 +125,7 @@ def models(
             "id": profile.identity.canonical_id,
             "name": profile.identity.display_name,
             "context_length": profile.capabilities.context_length,
-            "pricing": {
-                key: str(component.amount)
-                for key, component in sorted(profile.pricing.components.items())
-            },
+            "pricing": {key: str(component.amount) for key, component in sorted(profile.pricing.components.items())},
         }
         for profile in profiles
     ]
@@ -160,16 +157,14 @@ def estimate(
         OutputFormat, typer.Option("--format", help="Output format: table or json")
     ] = OutputFormat.table,
     offline: Annotated[bool, typer.Option(help="Use the cached OpenRouter catalog only")] = False,
-) -> None:
+):
     """Estimate request cost for one catalog model."""
     try:
         snapshot = analytics.catalog.refresh(offline=offline, include_litellm=False)
         profile = _find_profile(snapshot.models.values(), model_id)
         if profile is None:
             raise ValueError(f"model {model_id!r} was not found in the catalog")
-        request = RequestProfile(
-            explicit_input_tokens=input_tokens, expected_output_tokens=output_tokens
-        )
+        request = RequestProfile(explicit_input_tokens=input_tokens, expected_output_tokens=output_tokens)
         result = estimate_request_cost(profile, request)
     except (ModelCompassError, ValueError) as exc:
         err_console.print(f"Unable to estimate cost: {exc}")
@@ -212,9 +207,7 @@ def select(
     minimum_context: Annotated[
         int | None, typer.Option("--minimum-context", min=0, help="Minimum context window")
     ] = None,
-    max_cost: Annotated[
-        str | None, typer.Option("--max-cost", help="Maximum estimated cost in USD")
-    ] = None,
+    max_cost: Annotated[Optional[str], typer.Option("--max-cost", help="Maximum estimated cost in USD")] = None,
     min_quality: Annotated[
         str | None, typer.Option("--min-quality", help="Minimum task-specific quality (0 to 1)")
     ] = None,
@@ -222,15 +215,13 @@ def select(
         int | None, typer.Option("--max-latency-ms", min=0, help="Maximum measured latency")
     ] = None,
     requires_tools: Annotated[bool, typer.Option(help="Require tool/function calling")] = False,
-    requires_structured_output: Annotated[
-        bool, typer.Option(help="Require structured output")
-    ] = False,
+    requires_structured_output: Annotated[bool, typer.Option(help="Require structured output")] = False,
     policy: Annotated[SelectionPolicy, typer.Option(help="Ranking policy")] = SelectionPolicy.BEST,
     output_format: Annotated[
         OutputFormat, typer.Option("--format", help="Output format: table or json")
     ] = OutputFormat.table,
     offline: Annotated[bool, typer.Option(help="Use the cached OpenRouter catalog only")] = False,
-) -> None:
+):
     """Choose an eligible model using explicit request constraints."""
     try:
         request = RequestProfile(
@@ -273,9 +264,7 @@ def select(
             assessment.model_id,
             "yes" if assessment.eligible else "no",
             str(assessment.quality) if assessment.quality is not None else "unknown",
-            str(assessment.expected_cost_usd)
-            if assessment.expected_cost_usd is not None
-            else "unknown",
+            str(assessment.expected_cost_usd) if assessment.expected_cost_usd is not None else "unknown",
             "; ".join(assessment.reasons),
         )
     console.print(table)
@@ -288,27 +277,23 @@ def pareto(
         typer.Option(help="Comma-separated objectives: quality,reliability,cost,latency"),
     ] = "quality,cost",
     task: Annotated[str, typer.Option(help="Task label for task-specific evidence")] = "general",
-    input_tokens: Annotated[int | None, typer.Option("--input-tokens", min=0)] = None,
-    output_tokens: Annotated[int | None, typer.Option("--output-tokens", min=0)] = None,
+    input_tokens: Annotated[Optional[int], typer.Option("--input-tokens", min=0)] = None,
+    output_tokens: Annotated[Optional[int], typer.Option("--output-tokens", min=0)] = None,
     output_format: Annotated[
         OutputFormat, typer.Option("--format", help="Output format: table or json")
     ] = OutputFormat.table,
     offline: Annotated[bool, typer.Option(help="Use the cached OpenRouter catalog only")] = False,
-) -> None:
+):
     """Report the non-dominated eligible models for selected objectives."""
     try:
-        selected_objectives = tuple(
-            ParetoObjective(item.strip()) for item in objectives.split(",") if item.strip()
-        )
+        selected_objectives = tuple(ParetoObjective(item.strip()) for item in objectives.split(",") if item.strip())
         snapshot = analytics.catalog.refresh(offline=offline, include_litellm=False)
         request = RequestProfile(
             task=task,
             explicit_input_tokens=input_tokens,
             expected_output_tokens=output_tokens,
         )
-        result = analytics.select(
-            [snapshot.models[key] for key in sorted(snapshot.models)], request
-        )
+        result = analytics.select([snapshot.models[key] for key in sorted(snapshot.models)], request)
         frontier = pareto_frontier(result.assessments, selected_objectives)
     except (ModelCompassError, ValueError) as exc:
         err_console.print(f"Unable to calculate Pareto frontier: {exc}")
@@ -356,7 +341,7 @@ def benchmark(
     output_format: Annotated[
         OutputFormat, typer.Option("--format", help="Output format: table or json")
     ] = OutputFormat.table,
-) -> None:
+):
     """Evaluate saved benchmark outputs offline with a deterministic evaluator."""
     try:
         dataset_model = BenchmarkDataset.model_validate_json(dataset.read_text(encoding="utf-8"))
@@ -364,9 +349,7 @@ def benchmark(
         if not isinstance(raw_outputs, dict) or not all(
             isinstance(key, str) and isinstance(value, str) for key, value in raw_outputs.items()
         ):
-            raise ValueError(
-                "outputs file must contain a JSON object of string case IDs to strings"
-            )
+            raise ValueError("outputs file must contain a JSON object of string case IDs to strings")
         report = evaluate_benchmark(dataset_model, raw_outputs, model_id=model_id)
         if record:
             analytics.record_benchmark(report)
@@ -397,7 +380,7 @@ def benchmark(
 def run(
     model_id: Annotated[str, typer.Option("--model", help="LiteLLM model identifier")],
     task: Annotated[str, typer.Option(help="Task label for recorded observations")] = "general",
-) -> None:
+):
     """Execute one prompt read from stdin and record aggregate usage."""
     prompt = sys.stdin.read()
     if not prompt:
@@ -418,14 +401,12 @@ def run(
 
 @app.command()
 def observations(
-    task: Annotated[str | None, typer.Option(help="Filter by exact task label")] = None,
-    model_id: Annotated[
-        str | None, typer.Option("--model", help="Filter by canonical model ID")
-    ] = None,
+    task: Annotated[Optional[str], typer.Option(help="Filter by exact task label")] = None,
+    model_id: Annotated[Optional[str], typer.Option("--model", help="Filter by canonical model ID")] = None,
     output_format: Annotated[
         OutputFormat, typer.Option("--format", help="Output format: table or json")
     ] = OutputFormat.table,
-) -> None:
+):
     """List locally recorded aggregate execution observations."""
     try:
         records = analytics.list_observations(model_id=model_id, task=task)
@@ -462,7 +443,8 @@ def observations(
     console.print(table)
 
 
-def _parse_decimal_option(value: str | None, option_name: str) -> Decimal | None:
+def _parse_decimal_option(value: Optional[str], option_name: str) -> Optional[Decimal]:
+    """Parse an optional CLI decimal option, raising ValueError with its option name on failure."""
     if value is None:
         return None
     try:
@@ -471,12 +453,10 @@ def _parse_decimal_option(value: str | None, option_name: str) -> Decimal | None
         raise ValueError(f"{option_name} must be a decimal number") from exc
 
 
-def _find_profile(profiles: Iterable[ModelProfile], requested_id: str) -> ModelProfile | None:
+def _find_profile(profiles: Iterable[ModelProfile], requested_id: str) -> Optional[ModelProfile]:
+    """Find a profile by canonical ID or bare model ID, case-insensitively."""
     lowered = requested_id.strip().lower()
     for profile in profiles:
-        if (
-            profile.identity.canonical_id.lower() == lowered
-            or profile.identity.model_id.lower() == lowered
-        ):
+        if profile.identity.canonical_id.lower() == lowered or profile.identity.model_id.lower() == lowered:
             return profile
     return None

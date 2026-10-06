@@ -21,6 +21,7 @@ from model_compass import (
     SelectionError,
     StorageError,
     __version__,
+    application,
 )
 from model_compass.cli.app import app
 from model_compass.config import AppPaths, default_paths
@@ -29,21 +30,36 @@ runner = CliRunner()
 
 
 @pytest.mark.unit
-def test_import() -> None:
-    """Package imports without error."""
+def test_import():
+    """[Unit] package import: verifies model_compass imports without error.
+
+    Scenario: Reference the already-imported model_compass module.
+    Boundaries: Pure import check; no I/O.
+    On failure, first check: model_compass/__init__.py for a raised exception at import time.
+    """
     assert model_compass is not None
 
 
 @pytest.mark.unit
-def test_version_is_string() -> None:
-    """__version__ is a non-empty string."""
+def test_version_is_string():
+    """[Unit] version string: verifies __version__ is a non-empty string.
+
+    Scenario: Check the type and truthiness of model_compass.__version__.
+    Boundaries: Pure attribute check; no I/O.
+    On failure, first check: how __version__ is set in model_compass/__init__.py.
+    """
     assert isinstance(__version__, str)
     assert __version__
 
 
 @pytest.mark.unit
-def test_exception_hierarchy() -> None:
-    """Public exceptions are correctly related."""
+def test_exception_hierarchy():
+    """[Unit] exception hierarchy: verifies public exceptions derive from ModelCompassError.
+
+    Scenario: Check issubclass() for each public exception against ModelCompassError and Exception.
+    Boundaries: Pure class-hierarchy check; no I/O.
+    On failure, first check: each exception class's base in model_compass/exceptions.py.
+    """
     assert issubclass(ConfigurationError, ModelCompassError)
     assert issubclass(DependencyError, ModelCompassError)
     assert issubclass(BenchmarkError, ModelCompassError)
@@ -54,32 +70,52 @@ def test_exception_hierarchy() -> None:
 
 
 @pytest.mark.unit
-def test_cli_help() -> None:
-    """CLI --help exits 0."""
+def test_cli_help():
+    """[E2E] CLI help: verifies `--help` exits 0 and mentions the command name or usage.
+
+    Scenario: Invoke the Typer app with ["--help"] through CliRunner.
+    Boundaries: The whole CLI entry point runs in-process; no network or filesystem writes.
+    On failure, first check: the Typer app's name/help text in cli/app.py.
+    """
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "model-compass" in result.output.lower() or "usage" in result.output.lower()
 
 
 @pytest.mark.unit
-def test_cli_version() -> None:
-    """CLI version prints the version string."""
+def test_cli_version():
+    """[E2E] CLI version: verifies the `version` command prints the version string.
+
+    Scenario: Invoke the Typer app with ["version"] through CliRunner.
+    Boundaries: The whole CLI entry point runs in-process; no network or filesystem writes.
+    On failure, first check: the `version` command in cli/app.py.
+    """
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert __version__ in result.output
 
 
 @pytest.mark.unit
-def test_cli_doctor_table() -> None:
-    """CLI doctor default table output exits 0 and reports the version."""
+def test_cli_doctor_table():
+    """[E2E] doctor table output: verifies the default `doctor` output exits 0 and reports itself.
+
+    Scenario: Invoke the Typer app with ["doctor"] through CliRunner.
+    Boundaries: The whole CLI entry point runs in-process; no network or filesystem writes.
+    On failure, first check: the `doctor` command's table rendering in cli/app.py.
+    """
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0
     assert "doctor" in result.output.lower()
 
 
 @pytest.mark.unit
-def test_cli_doctor_json() -> None:
-    """CLI doctor --format json emits valid JSON with required keys."""
+def test_cli_doctor_json():
+    """[E2E] doctor JSON output: verifies `doctor --format json` emits valid JSON with required keys.
+
+    Scenario: Invoke the Typer app with ["doctor", "--format", "json"] through CliRunner.
+    Boundaries: The whole CLI entry point runs in-process; no network or filesystem writes.
+    On failure, first check: the `doctor` command's JSON payload construction in cli/app.py.
+    """
     result = runner.invoke(app, ["doctor", "--format", "json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -96,19 +132,15 @@ def test_cli_doctor_json() -> None:
 
 
 @pytest.mark.unit
-def test_cli_doctor_reports_litellm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Doctor reports an unavailable LiteLLM instead of crashing."""
-    import builtins
+def test_cli_doctor_reports_litellm_failure(monkeypatch: pytest.MonkeyPatch):
+    """[Local] doctor LiteLLM failure: verifies doctor reports an unavailable LiteLLM instead of crashing.
 
-    real_import = builtins.__import__
-
-    def fake_import(name: str, *args: object, **kwargs: object) -> object:
-        if name == "litellm":
-            raise ImportError("litellm is not installed")
-        return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.delitem(sys.modules, "litellm", raising=False)
-    monkeypatch.setattr(builtins, "__import__", fake_import)
+    Scenario: Set sys.modules["litellm"] = None, the documented way to force
+        ModuleNotFoundError on import, then invoke `doctor` in both JSON and table modes.
+    Boundaries: Only sys.modules is faked; the CLI entry point and its import handling run for real.
+    On failure, first check: the `doctor` command's ImportError handling in cli/app.py.
+    """
+    monkeypatch.setitem(sys.modules, "litellm", None)
 
     json_result = runner.invoke(app, ["doctor", "--format", "json"])
     table_result = runner.invoke(app, ["doctor"])
@@ -121,8 +153,14 @@ def test_cli_doctor_reports_litellm_failure(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_doctor_json_no_secrets() -> None:
-    """Doctor JSON output must not contain known secret environment variable values."""
+def test_doctor_json_no_secrets():
+    """[E2E] doctor secret redaction: verifies doctor JSON never echoes known secret env values.
+
+    Scenario: For each known secret env var present in the environment, invoke `doctor
+        --format json` and check its value doesn't appear in the output.
+    Boundaries: The whole CLI entry point runs in-process; reads real process environment.
+    On failure, first check: whether the `doctor` command's JSON payload includes raw env values.
+    """
     secret_vars = ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
     for var in secret_vars:
         secret_value = os.environ.get(var, "")
@@ -133,8 +171,14 @@ def test_doctor_json_no_secrets() -> None:
 
 
 @pytest.mark.unit
-def test_import_does_not_create_dirs(tmp_path: Path) -> None:
-    """Importing model_compass does not create user config/data/cache directories."""
+def test_import_does_not_create_dirs(tmp_path: Path):
+    """[Integration] import side effects: verifies importing model_compass creates no user directories.
+
+    Scenario: Run `import model_compass; default_paths()` in a subprocess with XDG env
+        vars pointed at a temp directory, then check none of its subdirectories exist.
+    Boundaries: A real Python subprocess and filesystem are used; no network.
+    On failure, first check: config.default_paths() for eager directory creation.
+    """
     env = dict(os.environ)
     env["XDG_CONFIG_HOME"] = str(tmp_path / "config")
     env["XDG_DATA_HOME"] = str(tmp_path / "data")
@@ -157,16 +201,24 @@ def test_import_does_not_create_dirs(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_application_module_imports() -> None:
-    """The application facade module imports without side effects."""
-    from model_compass import application
+def test_application_module_imports():
+    """[Unit] application facade import: verifies the module imports without side effects.
 
+    Scenario: Reference the already-imported model_compass.application module.
+    Boundaries: Pure import check; no I/O.
+    On failure, first check: model_compass/application.py for a raised exception at import time.
+    """
     assert application is not None
 
 
 @pytest.mark.unit
-def test_default_paths_returns_app_paths() -> None:
-    """default_paths() returns an AppPaths instance with Path attributes."""
+def test_default_paths_returns_app_paths():
+    """[Unit] default paths shape: verifies default_paths() returns an AppPaths of Path attributes.
+
+    Scenario: Call default_paths() and check the type of its result and each directory attribute.
+    Boundaries: Pure function call; no filesystem writes.
+    On failure, first check: config.default_paths()'s return type construction.
+    """
     paths = default_paths()
     assert isinstance(paths, AppPaths)
     assert isinstance(paths.config_dir, Path)

@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,13 +35,13 @@ class CandidateAnalysis(BaseModel):
     token_estimate: TokenEstimate
     cost: CostEstimate
     capabilities: ModelCapabilities
-    quality_evidence: MetricEvidence[Decimal] | None = None
-    latency_evidence: MetricEvidence[Decimal] | None = None
-    reliability_evidence: MetricEvidence[Decimal] | None = None
+    quality_evidence: Optional[MetricEvidence[Decimal]] = None
+    latency_evidence: Optional[MetricEvidence[Decimal]] = None
+    reliability_evidence: Optional[MetricEvidence[Decimal]] = None
     rank_by_policy: dict[str, int] = Field(default_factory=dict)
     selection_eligible: bool = True
     constraint_rejections: tuple[ConstraintResult, ...] = ()
-    pareto_member: bool | None = None
+    pareto_member: Optional[bool] = None
 
 
 class ComparisonReport(BaseModel):
@@ -50,7 +51,7 @@ class ComparisonReport(BaseModel):
 
     request: RequestProfile
     candidates: tuple[CandidateAnalysis, ...]
-    selected_policy: SelectionPolicy | None = None
+    selected_policy: Optional[SelectionPolicy] = None
 
     def to_json(self) -> str:
         """Serialize in stable key order and without formatting-dependent whitespace."""
@@ -67,20 +68,20 @@ def compare_models(
     request: RequestProfile,
     token_estimator: TokenEstimator,
     *,
-    prompt: str | None = None,
-    messages: Sequence[Mapping[str, object]] | None = None,
+    prompt: Optional[str] = None,
+    messages: Optional[Sequence[Mapping[str, object]]] = None,
     cached_input_read_tokens: int = 0,
     cached_input_write_tokens: int = 0,
-    reasoning_tokens: int | None = None,
-    unit_usage: Mapping[str, Decimal | int] | None = None,
+    reasoning_tokens: Optional[int] = None,
+    unit_usage: Optional[Mapping[str, Union[Decimal, int]]] = None,
     missing_data_policy: MissingDataPolicy = MissingDataPolicy.REJECT,
-    now_utc: datetime | None = None,
+    now_utc: Optional[datetime] = None,
     observations: Sequence[Observation] = (),
     quality_evidence: Sequence[QualityEvidence] = (),
-    quality_provider: QualityProvider | None = None,
+    quality_provider: Optional[QualityProvider] = None,
     constraints: Sequence[SelectionConstraint] = (),
     policies: Sequence[SelectionPolicy] = tuple(SelectionPolicy),
-    selected_policy: SelectionPolicy | None = None,
+    selected_policy: Optional[SelectionPolicy] = None,
 ) -> ComparisonReport:
     """Analyze candidates without invoking any model or provider service."""
     selected_policy = selected_policy or SelectionPolicy.BEST
@@ -142,11 +143,7 @@ def compare_models(
     primary_result = policy_results.get(selected_policy)
     if primary_result is None and policy_results:
         primary_result = next(iter(policy_results.values()))
-    assessments = (
-        {item.model_id: item for item in primary_result.assessments}
-        if primary_result is not None
-        else {}
-    )
+    assessments = {item.model_id: item for item in primary_result.assessments} if primary_result is not None else {}
     ranks = {
         policy.value: {item.model_id: index for index, item in enumerate(result.ranked, start=1)}
         for policy, result in policy_results.items()
@@ -167,9 +164,7 @@ def compare_models(
             if not cost.complete:
                 unknown.append("cost_estimate")
             if cost.total > request.max_cost_usd:
-                reasons.append(
-                    f"estimated cost {cost.total} USD exceeds maximum {request.max_cost_usd} USD"
-                )
+                reasons.append(f"estimated cost {cost.total} USD exceeds maximum {request.max_cost_usd} USD")
                 eligible = False
             elif not cost.complete:
                 if missing_data_policy == MissingDataPolicy.REJECT:

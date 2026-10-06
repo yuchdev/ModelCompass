@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from decimal import Decimal, InvalidOperation
-from typing import Any, Protocol, cast
+from typing import Any, Optional, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,11 +17,14 @@ from model_compass.metrics import Observation
 
 CompletionCall = Callable[..., Awaitable[Any]]
 
+_logger = logging.getLogger(__name__)
+
 
 class ExecutionError(ModelCompassError):
     """Raised when a model completion fails or returns an invalid response."""
 
-    def __init__(self, message: str, *, latency_ms: int | None = None) -> None:
+    def __init__(self, message: str, *, latency_ms: Optional[int] = None):
+        """Store the sanitized failure message and the latency observed so far."""
         super().__init__(message)
         self.latency_ms = latency_ms
 
@@ -44,9 +49,9 @@ class ExecutionResult(BaseModel):
     task: str
     output_text: str
     latency_ms: int
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    actual_cost_usd: Decimal | None = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    actual_cost_usd: Optional[Decimal] = None
 
     def to_observation(self) -> Observation:
         """Convert usage into a prompt-free local observation."""
@@ -64,7 +69,9 @@ class ExecutionResult(BaseModel):
 class ExecutionBackend(Protocol):
     """Provider-independent completion contract."""
 
-    async def complete(self, request: CompletionRequest) -> ExecutionResult: ...
+    async def complete(self, request: CompletionRequest) -> ExecutionResult:
+        """Run one completion request and return its normalized result."""
+        ...
 
 
 class LiteLLMBackend:
@@ -73,14 +80,17 @@ class LiteLLMBackend:
     def __init__(
         self,
         *,
-        completion_call: CompletionCall | None = None,
-        api_key: str | None = None,
-    ) -> None:
+        completion_call: Optional[CompletionCall] = None,
+        api_key: Optional[str] = None,
+    ):
+        """Store the injected completion callable (or defer to LiteLLM) and API key."""
         self._completion_call = completion_call
         self._api_key = api_key
 
     async def complete(self, request: CompletionRequest) -> ExecutionResult:
+        """Call the completion backend and normalize its response or failure."""
         completion_call = self._completion_call or _get_completion_call()
+        known_failures = _completion_failure_types()
         start = time.perf_counter_ns()
         try:
             parameters = dict(request.parameters)
@@ -91,12 +101,12 @@ class LiteLLMBackend:
                 messages=request.messages,
                 **parameters,
             )
-        except Exception as exc:
+        except known_failures as exc:
             elapsed = (time.perf_counter_ns() - start) // 1_000_000
             raise ExecutionError(
                 f"LiteLLM completion failed ({type(exc).__name__})",
                 latency_ms=elapsed,
-            ) from None
+            ) from exc
         latency_ms = (time.perf_counter_ns() - start) // 1_000_000
         choices = _get(response, "choices", [])
         if not choices:
@@ -124,30 +134,41 @@ class LiteLLMBackend:
 
 
 def _get(value: Any, key: str, default: Any) -> Any:
+    """Read `key` from a dict or object `value`, falling back to `default`."""
     if isinstance(value, dict):
         return value.get(key, default)
     return getattr(value, key, default)
 
 
-def _as_int(value: Any) -> int | None:
+def _as_int(value: Any) -> Optional[int]:
+    """Coerce a usage field to a non-negative int, or None if it isn't one."""
     if isinstance(value, int) and value >= 0:
         return value
     return None
 
 
-def _as_decimal(value: Any) -> Decimal | None:
+def _as_decimal(value: Any) -> Optional[Decimal]:
+    """Coerce a provider cost field to a finite, non-negative Decimal, or None."""
     if value is None:
         return None
     try:
         result = Decimal(str(value))
     except (InvalidOperation, ValueError):
+        _logger.debug("Ignoring unparseable response_cost value: %r", value)
         return None
     return result if result.is_finite() and result >= 0 else None
 
 
+def _completion_failure_types() -> tuple[type[Exception], ...]:
+    """Return the known exception types a real completion call can raise."""
+    litellm_exceptions = importlib.import_module("litellm.exceptions")
+    return (*litellm_exceptions.LITELLM_EXCEPTION_TYPES, TimeoutError, ConnectionError, OSError)
+
+
 def _get_completion_call() -> CompletionCall:
+    """Resolve LiteLLM's acompletion, raising DependencyError if unavailable."""
     try:
-        from litellm import acompletion
+        litellm_module = importlib.import_module("litellm")
     except ImportError as exc:
         raise DependencyError("LiteLLM is required for model execution") from exc
-    return cast(CompletionCall, acompletion)
+    return cast(CompletionCall, litellm_module.acompletion)

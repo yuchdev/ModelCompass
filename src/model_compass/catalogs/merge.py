@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 
 from model_compass.domain import (
     CatalogMergeResult,
@@ -22,7 +22,7 @@ def merge_catalog_snapshots(
     primary: CatalogSnapshot,
     secondary: CatalogSnapshot,
     *,
-    now_utc: datetime | None = None,
+    now_utc: Optional[datetime] = None,
 ) -> CatalogMergeResult:
     """Merge two snapshots where primary wins on conflicts unless unknown."""
     clock = now_utc or datetime.now(UTC)
@@ -63,12 +63,11 @@ def _merge_profiles(
     primary: ModelProfile,
     secondary: ModelProfile,
 ) -> tuple[ModelProfile, dict[str, Any]]:
+    """Merge two profiles for the same model and record any field conflicts."""
     if primary.identity.canonical_id != secondary.identity.canonical_id:
         raise ValueError("cannot merge mismatched model identities")
 
-    capability, capability_conflicts = _merge_capabilities(
-        primary.capabilities, secondary.capabilities
-    )
+    capability, capability_conflicts = _merge_capabilities(primary.capabilities, secondary.capabilities)
     pricing, pricing_conflicts = _merge_pricing(primary, secondary)
 
     sources = _dedupe_sources((*primary.sources, *secondary.sources))
@@ -105,6 +104,7 @@ def _merge_capabilities(
     primary: ModelCapabilities,
     secondary: ModelCapabilities,
 ) -> tuple[ModelCapabilities, dict[str, dict[str, str]]]:
+    """Merge two capability sets, preferring primary non-unknown values, and record conflicts."""
     payload = primary.model_dump()
     conflicts: dict[str, dict[str, str]] = {}
 
@@ -124,11 +124,7 @@ def _merge_capabilities(
 
         if p_value == SupportStatus.UNKNOWN and s_value != SupportStatus.UNKNOWN:
             payload[field_name] = s_value
-        elif (
-            p_value != SupportStatus.UNKNOWN
-            and s_value != SupportStatus.UNKNOWN
-            and p_value != s_value
-        ):
+        elif p_value != SupportStatus.UNKNOWN and s_value != SupportStatus.UNKNOWN and p_value != s_value:
             conflicts[field_name] = {"primary": p_value.value, "secondary": s_value.value}
 
     for field_name in ("context_length", "max_output_tokens"):
@@ -154,6 +150,7 @@ def _merge_capabilities(
 
 
 def _is_primary_authoritative(profile: ModelProfile) -> bool:
+    """Return whether the profile has an authoritative, non-stale source."""
     return any(source.authoritative and not source.stale for source in profile.sources)
 
 
@@ -161,6 +158,7 @@ def _merge_pricing(
     primary_profile: ModelProfile,
     secondary_profile: ModelProfile,
 ) -> tuple[Pricing, dict[str, dict[str, str]]]:
+    """Merge pricing from two profiles, preserving unknown keys, and record conflicts."""
     primary = primary_profile.pricing
     secondary = secondary_profile.pricing
     conflicts: dict[str, dict[str, str]] = {}
@@ -183,9 +181,7 @@ def _merge_pricing(
         if pri_value.amount != sec_value.amount:
             if not primary_authoritative:
                 components[key] = sec_value
-                source_by_key[key] = (
-                    secondary_profile.sources[0].name if secondary_profile.sources else "secondary"
-                )
+                source_by_key[key] = secondary_profile.sources[0].name if secondary_profile.sources else "secondary"
             disagreements[key] = {
                 "primary": str(pri_value.amount),
                 "secondary": str(sec_value.amount),
@@ -206,6 +202,7 @@ def _merge_pricing(
 
 
 def _dedupe_sources(sources: tuple[Any, ...]) -> tuple[Any, ...]:
+    """Return the sources with duplicate name and timestamp pairs removed."""
     seen: set[tuple[str, str]] = set()
     result = []
     for source in sources:
@@ -217,8 +214,6 @@ def _dedupe_sources(sources: tuple[Any, ...]) -> tuple[Any, ...]:
     return tuple(result)
 
 
-def choose_price_value(
-    primary: PriceComponent, secondary: PriceComponent, prefer_primary: bool
-) -> Decimal:
+def choose_price_value(primary: PriceComponent, secondary: PriceComponent, prefer_primary: bool) -> Decimal:
     """Small helper retained for explicit unit tests around deterministic choice."""
     return primary.amount if prefer_primary else secondary.amount

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -17,25 +17,26 @@ class RequestProfile(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    task: str | None = None
+    task: Optional[str] = None
     input_modalities: frozenset[str] = frozenset()
     output_modalities: frozenset[str] = frozenset()
-    explicit_input_tokens: int | None = Field(default=None, ge=0)
-    expected_output_tokens: int | None = Field(default=None, ge=0)
-    minimum_context: int | None = Field(default=None, ge=0)
-    requires_tools: bool | None = None
-    requires_structured_output: bool | None = None
-    requires_reasoning: bool | None = None
-    requires_streaming: bool | None = None
-    max_cost_usd: Decimal | None = Field(default=None, ge=0)
-    min_quality: Decimal | None = Field(default=None, ge=0, le=1)
-    max_latency_ms: int | None = Field(default=None, ge=0)
-    min_reliability: Decimal | None = Field(default=None, ge=0, le=1)
+    explicit_input_tokens: Optional[int] = Field(default=None, ge=0)
+    expected_output_tokens: Optional[int] = Field(default=None, ge=0)
+    minimum_context: Optional[int] = Field(default=None, ge=0)
+    requires_tools: Optional[bool] = None
+    requires_structured_output: Optional[bool] = None
+    requires_reasoning: Optional[bool] = None
+    requires_streaming: Optional[bool] = None
+    max_cost_usd: Optional[Decimal] = Field(default=None, ge=0)
+    min_quality: Optional[Decimal] = Field(default=None, ge=0, le=1)
+    max_latency_ms: Optional[int] = Field(default=None, ge=0)
+    min_reliability: Optional[Decimal] = Field(default=None, ge=0, le=1)
     metadata: Mapping[str, object] = Field(default_factory=dict)
 
     @field_validator("input_modalities", "output_modalities", mode="before")
     @classmethod
     def _normalize_modalities(cls, value: object) -> frozenset[str]:
+        """Normalize modality inputs into a frozenset of lowercased names."""
         if isinstance(value, str):
             values: list[object] = [value]
         elif isinstance(value, (Sequence, set, frozenset)):
@@ -48,17 +49,18 @@ class RequestProfile(BaseModel):
 
     @field_validator("max_cost_usd", "min_quality", "min_reliability", mode="before")
     @classmethod
-    def _parse_decimal_values(cls, value: object) -> Decimal | None:
+    def _parse_decimal_values(cls, value: object) -> Optional[Decimal]:
+        """Parse optional decimal requirement values."""
         return None if value is None else parse_decimal(value)
 
     @classmethod
     def from_request(
         cls,
         *,
-        prompt: str | None = None,
-        messages: Sequence[Mapping[str, object]] | None = None,
-        tools: Sequence[Mapping[str, object]] | None = None,
-        response_schema: Mapping[str, object] | None = None,
+        prompt: Optional[str] = None,
+        messages: Optional[Sequence[Mapping[str, object]]] = None,
+        tools: Optional[Sequence[Mapping[str, object]]] = None,
+        response_schema: Optional[Mapping[str, object]] = None,
         **requirements: Any,
     ) -> RequestProfile:
         """Build a profile, preferring every explicitly supplied requirement."""
@@ -80,9 +82,7 @@ class RequestProfile(BaseModel):
         explicit_input = requirements.get("explicit_input_tokens")
         content_size = _request_character_count(prompt, messages)
         if "minimum_context" not in requirements and content_size:
-            input_size = (
-                explicit_input if isinstance(explicit_input, int) else (content_size + 3) // 4
-            )
+            input_size = explicit_input if isinstance(explicit_input, int) else (content_size + 3) // 4
             reserve = expected_output if isinstance(expected_output, int) else 0
             inferred["minimum_context"] = input_size + reserve
             context_assumptions = [
@@ -110,10 +110,10 @@ class RequestProfile(BaseModel):
 
 def build_request_profile(
     *,
-    prompt: str | None = None,
-    messages: Sequence[Mapping[str, object]] | None = None,
-    tools: Sequence[Mapping[str, object]] | None = None,
-    response_schema: Mapping[str, object] | None = None,
+    prompt: Optional[str] = None,
+    messages: Optional[Sequence[Mapping[str, object]]] = None,
+    tools: Optional[Sequence[Mapping[str, object]]] = None,
+    response_schema: Optional[Mapping[str, object]] = None,
     **requirements: Any,
 ) -> RequestProfile:
     """Public factory for explicit requirements and conservative inference."""
@@ -127,8 +127,9 @@ def build_request_profile(
 
 
 def _infer_input_modalities(
-    prompt: str | None, messages: Sequence[Mapping[str, object]] | None
+    prompt: Optional[str], messages: Optional[Sequence[Mapping[str, object]]]
 ) -> tuple[bool, bool]:
+    """Infer whether the request includes text and image inputs."""
     has_text = bool(prompt)
     has_image = False
     for message in messages or ():
@@ -147,9 +148,8 @@ def _infer_input_modalities(
     return has_text, has_image
 
 
-def _request_character_count(
-    prompt: str | None, messages: Sequence[Mapping[str, object]] | None
-) -> int:
+def _request_character_count(prompt: Optional[str], messages: Optional[Sequence[Mapping[str, object]]]) -> int:
+    """Return the character size of the request content."""
     if prompt is not None:
         return len(prompt)
     if not messages:

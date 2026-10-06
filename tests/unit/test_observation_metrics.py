@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Optional
 
 import pytest
 from hypothesis import given
@@ -16,12 +17,13 @@ def _observation(
     observation_id: str,
     *,
     success: bool = True,
-    latency: str | None = None,
-    actual: str | None = None,
-    estimated: str | None = None,
-    input_tokens: int | None = None,
-    output_tokens: int | None = None,
+    latency: Optional[str] = None,
+    actual: Optional[str] = None,
+    estimated: Optional[str] = None,
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
 ) -> Observation:
+    """Build an observation fixture with optional latency, cost, and token counts."""
     return Observation(
         observation_id=observation_id,
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),
@@ -38,12 +40,16 @@ def _observation(
 
 
 @pytest.mark.unit
-def test_summary_uses_nearest_rank_quantiles_and_keeps_cost_sources_separate() -> None:
+def test_summary_uses_nearest_rank_quantiles_and_keeps_cost_sources_separate():
+    """[Unit] Summary uses nearest rank quantiles and keeps cost sources separate: verifies the described behaviour holds.
+
+    Scenario: Exercises summary uses nearest rank quantiles and keeps cost sources separate and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     summary = summarize_observations(
         [
-            _observation(
-                "1", latency="1", actual="0.12", estimated="0.15", input_tokens=10, output_tokens=4
-            ),
+            _observation("1", latency="1", actual="0.12", estimated="0.15", input_tokens=10, output_tokens=4),
             _observation("2", success=False, latency="2", estimated="0.25", input_tokens=20),
             _observation("3", latency="3", actual="0.30", output_tokens=8),
             _observation("4", latency="4", input_tokens=30, output_tokens=12),
@@ -64,7 +70,13 @@ def test_summary_uses_nearest_rank_quantiles_and_keeps_cost_sources_separate() -
 
 
 @pytest.mark.unit
-def test_minimum_sample_suppresses_rates_and_estimates() -> None:
+def test_minimum_sample_suppresses_rates_and_estimates():
+    """[Unit] Minimum sample suppresses rates and estimates: verifies the described behaviour holds.
+
+    Scenario: Exercises minimum sample suppresses rates and estimates and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     summary = summarize_observations(
         [_observation("only", success=False, latency="50", actual="1")],
         min_samples=2,
@@ -78,7 +90,13 @@ def test_minimum_sample_suppresses_rates_and_estimates() -> None:
 
 
 @pytest.mark.unit
-def test_minimum_sample_threshold_applies_to_each_metric_denominator() -> None:
+def test_minimum_sample_threshold_applies_to_each_metric_denominator():
+    """[Unit] Minimum sample threshold applies to each metric denominator: verifies the described behaviour holds.
+
+    Scenario: Exercises minimum sample threshold applies to each metric denominator and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     rows = [_observation(str(index)) for index in range(5)]
     rows[0] = _observation("0", latency="20", actual="0.1", input_tokens=8)
     summary = summarize_observations(rows)
@@ -102,10 +120,16 @@ def test_minimum_sample_threshold_applies_to_each_metric_denominator() -> None:
     ],
 )
 def test_cost_summary_source_semantics(
-    actual: str | None,
-    estimated: str | None,
+    actual: Optional[str],
+    estimated: Optional[str],
     expected: str,
-) -> None:
+):
+    """[Unit] Cost summary source semantics: verifies the described behaviour holds.
+
+    Scenario: Exercises cost summary source semantics and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     summary = summarize_observations(
         [_observation("cost", actual=actual, estimated=estimated)],
         min_samples=1,
@@ -114,7 +138,13 @@ def test_cost_summary_source_semantics(
 
 
 @pytest.mark.unit
-def test_empty_and_invalid_sample_threshold() -> None:
+def test_empty_and_invalid_sample_threshold():
+    """[Unit] Empty and invalid sample threshold: verifies the described behaviour holds.
+
+    Scenario: Exercises empty and invalid sample threshold and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     empty = summarize_observations([])
     assert empty.reliability.success_rate is None
     assert empty.cost.cost_basis == "none"
@@ -123,7 +153,13 @@ def test_empty_and_invalid_sample_threshold() -> None:
 
 
 @pytest.mark.unit
-def test_timestamp_must_be_aware_and_is_normalized_to_utc() -> None:
+def test_timestamp_must_be_aware_and_is_normalized_to_utc():
+    """[Unit] Timestamp must be aware and is normalized to utc: verifies the described behaviour holds.
+
+    Scenario: Exercises timestamp must be aware and is normalized to utc and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     with pytest.raises(ValueError, match="timezone"):
         Observation(
             observation_id="naive",
@@ -141,7 +177,13 @@ def test_timestamp_must_be_aware_and_is_normalized_to_utc() -> None:
 
 
 @pytest.mark.unit
-def test_measurements_are_validated_and_benchmark_times_are_ordered() -> None:
+def test_measurements_are_validated_and_benchmark_times_are_ordered():
+    """[Unit] Measurements are validated and benchmark times are ordered: verifies the described behaviour holds.
+
+    Scenario: Exercises measurements are validated and benchmark times are ordered and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     with pytest.raises(ValueError, match="greater than or equal"):
         Observation(model_id="provider:model", success=True, input_tokens=-1)
     with pytest.raises(ValueError, match="finite"):
@@ -168,11 +210,15 @@ def test_measurements_are_validated_and_benchmark_times_are_ordered() -> None:
 
 
 @pytest.mark.unit
-def test_fingerprint_is_sha256_and_memory_store_defaults_to_no_payload() -> None:
+def test_fingerprint_is_sha256_and_memory_store_defaults_to_no_payload():
+    """[Unit] Fingerprint is sha256 and memory store defaults to no payload: verifies the described behaviour holds.
+
+    Scenario: Exercises fingerprint is sha256 and memory store defaults to no payload and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     raw_prompt = "predictable input"
-    assert fingerprint_request(raw_prompt) == (
-        "5856e97a1c81c8786740ed019f92972165c6c999a7da00db07114f8a744dfe79"
-    )
+    assert fingerprint_request(raw_prompt) == ("5856e97a1c81c8786740ed019f92972165c6c999a7da00db07114f8a744dfe79")
     store = InMemoryObservationStore()
     stored = store.record_observation(
         Observation(
@@ -198,14 +244,15 @@ def test_fingerprint_is_sha256_and_memory_store_defaults_to_no_payload() -> None
     successes=st.lists(st.booleans(), min_size=1, max_size=20),
 )
 @pytest.mark.unit
-def test_percentiles_and_success_rate_stay_within_bounds(
-    latencies: list[Decimal], successes: list[bool]
-) -> None:
+def test_percentiles_and_success_rate_stay_within_bounds(latencies: list[Decimal], successes: list[bool]):
+    """[Unit] Percentiles and success rate stay within bounds: verifies the described behaviour holds.
+
+    Scenario: Exercises percentiles and success rate stay within bounds and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     size = min(len(latencies), len(successes))
-    rows = [
-        Observation(model_id="m", success=successes[index], latency_ms=latencies[index])
-        for index in range(size)
-    ]
+    rows = [Observation(model_id="m", success=successes[index], latency_ms=latencies[index]) for index in range(size)]
     summary = summarize_observations(rows, min_samples=1)
     p50 = summary.latency.p50_latency_ms
     p95 = summary.latency.p95_latency_ms
@@ -225,7 +272,13 @@ def test_percentiles_and_success_rate_stay_within_bounds(
     )
 )
 @pytest.mark.unit
-def test_actual_cost_totals_equal_the_sum_of_observations(actual: list[Decimal]) -> None:
+def test_actual_cost_totals_equal_the_sum_of_observations(actual: list[Decimal]):
+    """[Unit] Actual cost totals equal the sum of observations: verifies the described behaviour holds.
+
+    Scenario: Exercises actual cost totals equal the sum of observations and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     rows = [
         Observation(
             model_id="provider:model",
@@ -244,7 +297,13 @@ def test_actual_cost_totals_equal_the_sum_of_observations(actual: list[Decimal])
     success=st.booleans(),
 )
 @pytest.mark.unit
-def test_jsonl_serialization_round_trip(amount: Decimal, success: bool) -> None:
+def test_jsonl_serialization_round_trip(amount: Decimal, success: bool):
+    """[Unit] Jsonl serialization round trip: verifies the described behaviour holds.
+
+    Scenario: Exercises jsonl serialization round trip and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     store = InMemoryObservationStore()
     store.record_observation(
         Observation(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
-from typing import Protocol
+from typing import Optional, Protocol, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,9 +12,8 @@ from model_compass.domain import ModelProfile, RequestProfile, SupportStatus
 from model_compass.selection.evidence import MetricEvidence
 
 
-def _validated_decimal(
-    value: Decimal | int, name: str, *, maximum: Decimal | None = None
-) -> Decimal:
+def _validated_decimal(value: Union[Decimal, int], name: str, *, maximum: Optional[Decimal] = None) -> Decimal:
+    """Coerce a value to a finite, non-negative Decimal within an optional maximum."""
     result = value if isinstance(value, Decimal) else Decimal(value)
     if not result.is_finite() or result < 0 or (maximum is not None and result > maximum):
         upper = f" and at most {maximum}" if maximum is not None else ""
@@ -36,26 +35,32 @@ class ConstraintResult(BaseModel):
 class CandidateMetrics(Protocol):
     """Selection metrics consumed by constraint evaluators."""
 
-    expected_cost_usd: Decimal | None
-    quality: Decimal | None
-    reliability: Decimal | None
-    latency_ms: Decimal | None
-    quality_evidence: MetricEvidence[Decimal] | None
-    reliability_evidence: MetricEvidence[Decimal] | None
-    latency_evidence: MetricEvidence[Decimal] | None
+    expected_cost_usd: Optional[Decimal]
+    quality: Optional[Decimal]
+    reliability: Optional[Decimal]
+    latency_ms: Optional[Decimal]
+    quality_evidence: Optional[MetricEvidence[Decimal]]
+    reliability_evidence: Optional[MetricEvidence[Decimal]]
+    latency_evidence: Optional[MetricEvidence[Decimal]]
 
 
 class SelectionConstraint(Protocol):
     """A reusable constraint evaluated independently for one candidate."""
 
-    def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult: ...
+    def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Return the constraint outcome for one candidate."""
+        ...
 
 
 class MinimumQuality:
-    def __init__(self, value: Decimal) -> None:
+    """Reject candidates whose quality is missing or below a minimum."""
+
+    def __init__(self, value: Decimal):
+        """Validate and store the minimum quality threshold."""
         self.value = _validated_decimal(value, "minimum quality", maximum=Decimal(1))
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate quality against the minimum threshold."""
         del profile
         evidence = metrics.quality_evidence
         passed = metrics.quality is not None and metrics.quality >= self.value
@@ -76,10 +81,14 @@ class MinimumQuality:
 
 
 class MaximumExpectedCost:
-    def __init__(self, value: Decimal) -> None:
+    """Reject candidates whose expected cost is missing or above a maximum."""
+
+    def __init__(self, value: Decimal):
+        """Validate and store the maximum expected cost threshold."""
         self.value = _validated_decimal(value, "maximum expected cost")
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate expected cost against the maximum threshold."""
         del profile
         passed = metrics.expected_cost_usd is not None and metrics.expected_cost_usd <= self.value
         return ConstraintResult(
@@ -95,10 +104,14 @@ class MaximumExpectedCost:
 
 
 class MaximumLatency:
-    def __init__(self, value: Decimal | int) -> None:
+    """Reject candidates whose latency is missing or above a maximum."""
+
+    def __init__(self, value: Union[Decimal, int]):
+        """Validate and store the maximum latency threshold."""
         self.value = _validated_decimal(value, "maximum latency")
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate latency against the maximum threshold."""
         del profile
         passed = metrics.latency_ms is not None and metrics.latency_ms <= self.value
         return ConstraintResult(
@@ -113,18 +126,20 @@ class MaximumLatency:
                 "value": metrics.latency_ms,
                 "maximum": self.value,
                 "source": metrics.latency_evidence.source if metrics.latency_evidence else None,
-                "sample_count": (
-                    metrics.latency_evidence.sample_count if metrics.latency_evidence else None
-                ),
+                "sample_count": (metrics.latency_evidence.sample_count if metrics.latency_evidence else None),
             },
         )
 
 
 class MinimumReliability:
-    def __init__(self, value: Decimal) -> None:
+    """Reject candidates whose reliability is missing or below a minimum."""
+
+    def __init__(self, value: Decimal):
+        """Validate and store the minimum reliability threshold."""
         self.value = _validated_decimal(value, "minimum reliability", maximum=Decimal(1))
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate reliability against the minimum threshold."""
         del profile
         passed = metrics.reliability is not None and metrics.reliability >= self.value
         return ConstraintResult(
@@ -138,26 +153,25 @@ class MinimumReliability:
             evidence={
                 "value": metrics.reliability,
                 "minimum": self.value,
-                "sample_count": (
-                    metrics.reliability_evidence.sample_count
-                    if metrics.reliability_evidence
-                    else None
-                ),
+                "sample_count": (metrics.reliability_evidence.sample_count if metrics.reliability_evidence else None),
             },
         )
 
 
 class RequiredCapabilities:
-    def __init__(self, capabilities: Sequence[str]) -> None:
+    """Reject candidates that do not support every required capability."""
+
+    def __init__(self, capabilities: Sequence[str]):
+        """Store the required capability names."""
         self.capabilities = tuple(capabilities)
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check that every required capability is supported by the candidate."""
         del metrics
         failed = [
             capability
             for capability in self.capabilities
-            if getattr(profile.capabilities, capability, SupportStatus.UNKNOWN)
-            != SupportStatus.SUPPORTED
+            if getattr(profile.capabilities, capability, SupportStatus.UNKNOWN) != SupportStatus.SUPPORTED
         ]
         return ConstraintResult(
             passed=not failed,
@@ -170,12 +184,16 @@ class RequiredCapabilities:
 
 
 class MinimumContext:
-    def __init__(self, value: int) -> None:
+    """Reject candidates whose context length is missing or below a minimum."""
+
+    def __init__(self, value: int):
+        """Validate and store the minimum context length."""
         if value < 0:
             raise ValueError("minimum context must be non-negative")
         self.value = value
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate context length against the minimum threshold."""
         del metrics
         context = profile.capabilities.context_length
         passed = context is not None and context >= self.value
@@ -192,11 +210,15 @@ class MinimumContext:
 
 
 class ModelIdAllowBlock:
-    def __init__(self, *, allowed: Sequence[str] = (), blocked: Sequence[str] = ()) -> None:
+    """Reject candidates outside an allow list or inside a block list of model IDs."""
+
+    def __init__(self, *, allowed: Sequence[str] = (), blocked: Sequence[str] = ()):
+        """Store the allowed and blocked model-ID sets."""
         self.allowed = frozenset(allowed)
         self.blocked = frozenset(blocked)
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate model ID against the allow and block lists."""
         del metrics
         model_id = profile.identity.canonical_id
         passed = (not self.allowed or model_id in self.allowed) and model_id not in self.blocked
@@ -209,6 +231,8 @@ class ModelIdAllowBlock:
 
 
 class GatewayProviderAllowBlock:
+    """Reject candidates by gateway or provider allow and block lists."""
+
     def __init__(
         self,
         *,
@@ -216,13 +240,15 @@ class GatewayProviderAllowBlock:
         blocked_gateways: Sequence[str] = (),
         allowed_providers: Sequence[str] = (),
         blocked_providers: Sequence[str] = (),
-    ) -> None:
+    ):
+        """Store the allowed and blocked gateway and provider sets."""
         self.allowed_gateways = frozenset(allowed_gateways)
         self.blocked_gateways = frozenset(blocked_gateways)
         self.allowed_providers = frozenset(allowed_providers)
         self.blocked_providers = frozenset(blocked_providers)
 
     def evaluate(self, profile: ModelProfile, metrics: CandidateMetrics) -> ConstraintResult:
+        """Check the candidate gateways and providers against the allow and block lists."""
         del metrics
         provider = profile.identity.provider
         gateways = {
@@ -250,12 +276,12 @@ class GatewayProviderAllowBlock:
 def request_constraints(
     request: RequestProfile,
     *,
-    min_quality: Decimal | None = None,
-    max_cost: Decimal | None = None,
-    max_latency_ms: int | Decimal | None = None,
-    min_reliability: Decimal | None = None,
+    min_quality: Optional[Decimal] = None,
+    max_cost: Optional[Decimal] = None,
+    max_latency_ms: Optional[Union[int, Decimal]] = None,
+    min_reliability: Optional[Decimal] = None,
     required_capabilities: Sequence[str] = (),
-    minimum_context: int | None = None,
+    minimum_context: Optional[int] = None,
     allowed_model_ids: Sequence[str] = (),
     blocked_model_ids: Sequence[str] = (),
     allowed_gateways: Sequence[str] = (),

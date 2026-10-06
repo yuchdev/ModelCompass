@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,7 +28,7 @@ class EligibilityResult(BaseModel):
 
 
 def check_eligibility(
-    model: ModelProfile | ModelCapabilities,
+    model: Union[ModelProfile, ModelCapabilities],
     request: RequestProfile,
     *,
     missing_data_policy: MissingDataPolicy = MissingDataPolicy.REJECT,
@@ -41,18 +42,14 @@ def check_eligibility(
         if capabilities.context_length is None:
             unknown.append("context_length")
         elif capabilities.context_length < request.minimum_context:
-            rejected.append(
-                f"context length {capabilities.context_length} is below minimum "
-                f"{request.minimum_context}"
-            )
+            rejected.append(f"context length {capabilities.context_length} is below minimum {request.minimum_context}")
     if (
         request.expected_output_tokens is not None
         and capabilities.max_output_tokens is not None
         and capabilities.max_output_tokens < request.expected_output_tokens
     ):
         rejected.append(
-            f"maximum output tokens {capabilities.max_output_tokens} is below expected "
-            f"{request.expected_output_tokens}"
+            f"maximum output tokens {capabilities.max_output_tokens} is below expected {request.expected_output_tokens}"
         )
     elif request.expected_output_tokens is not None and capabilities.max_output_tokens is None:
         unknown.append("max_output_tokens")
@@ -105,7 +102,8 @@ def _check_modalities(
     supported: tuple[str, ...],
     rejected: list[str],
     unknown: list[str],
-) -> None:
+):
+    """Record rejected or unknown modalities for one direction against a requirement."""
     if not required:
         return
     if not supported:
@@ -117,11 +115,12 @@ def _check_modalities(
 
 def _check_flag(
     name: str,
-    required: bool | None,
+    required: Optional[bool],
     status: SupportStatus,
     rejected: list[str],
     unknown: list[str],
-) -> None:
+):
+    """Record a rejected or unknown capability flag against a required flag."""
     if required is not True:
         return
     if status == SupportStatus.UNSUPPORTED:

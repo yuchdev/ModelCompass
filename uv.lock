@@ -639,6 +639,15 @@ wheels = [
 ]
 
 [[package]]
+name = "flakeforge"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/69/b1798c0b69892ef5e88788ca9e5053011ce661f2dba76855dd5789c2fe1e/flakeforge-1.1.0.tar.gz", hash = "sha256:9d52f2236551fd745b1422b3f3e284943e7d2bf2c1c61bcae21b2509af0f6b3d", size = 109610, upload-time = "2026-09-30T14:25:23.089Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/ef/0e4a7efabed6c8d50b688869d5310ce6edc975652bb29aa4d4f73f67c6a6/flakeforge-1.1.0-py3-none-any.whl", hash = "sha256:f1044cac4a3d23c7e7d400ce7f2ee0f40a029a1f852c06d7d7b487a2b33d4dd7", size = 68346, upload-time = "2026-09-30T14:25:20.787Z" },
+]
+
+[[package]]
 name = "frozenlist"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1467,11 +1476,13 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "flakeforge" },
     { name = "hypothesis" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "release-saga" },
     { name = "respx" },
     { name = "ruff" },
 ]
@@ -1493,11 +1504,13 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "flakeforge", specifier = "==1.1.0" },
     { name = "hypothesis", specifier = ">=6.0" },
     { name = "mypy", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "release-saga", specifier = "==1.2.0" },
     { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.7" },
 ]
@@ -2260,6 +2273,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/d7/01d31d5bdb09bc026fab77f59a371fdf8f9b292e4810546c56182ca70498/regex-2026.7.19-cp314-cp314t-win32.whl", hash = "sha256:2c4e61e2e1be56f63ec3cc618aa9e0de81ef6f43d177205451840022e24f5b78", size = 274526, upload-time = "2026-07-19T00:19:42.398Z" },
     { url = "https://files.pythonhosted.org/packages/52/0e/cea4ce73bc0a8247a0748228ae6669984c7e1f8134b6fa66e59c0572e0ea/regex-2026.7.19-cp314-cp314t-win_amd64.whl", hash = "sha256:c639ea314df70a7b2811e8020448c75af8c9445f5a60f8a4ced81c306a9380c2", size = 283763, upload-time = "2026-07-19T00:19:44.644Z" },
     { url = "https://files.pythonhosted.org/packages/6f/b6/26e41975febae63b7a6e3e02f32cff6cff2e4f10d19c929082f56aebf7c6/regex-2026.7.19-cp314-cp314t-win_arm64.whl", hash = "sha256:9a15e785f244f3e07847b984ce8773fc3da10a9f3c131cc49a4c5b4d672b4547", size = 283451, upload-time = "2026-07-19T00:19:46.639Z" },
+]
+
+[[package]]
+name = "release-saga"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/83/9ab9c7fe9f80d488fd8b95ed286be29c5cb42e3b721f6aed68438bb4f909/release_saga-1.2.0.tar.gz", hash = "sha256:41997aa2a8828ae3f38f00898103e9ddfe154477e0256f07b610aa897b333181", size = 49168, upload-time = "2026-09-24T11:08:17.027Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/7f/abfa786dd707a7814252eba15acb13d5ab6fcf5d89e2aa229e5e8dbbdaa4/release_saga-1.2.0-py3-none-any.whl", hash = "sha256:56ddd95be6587a20097379b9d32111578057e5ac8f53f46232413f5f989b3e07", size = 33817, upload-time = "2026-09-24T11:08:13.846Z" },
 ]
 
 [[package]]

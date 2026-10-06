@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Mapping, Sequence
-from typing import Protocol
+from typing import Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,10 +30,10 @@ class TokenEstimator(Protocol):
         self,
         *,
         model: str,
-        prompt: str | None = None,
-        messages: Sequence[Message] | None = None,
-        explicit_input_tokens: int | None = None,
-        expected_output_tokens: int | None = None,
+        prompt: Optional[str] = None,
+        messages: Optional[Sequence[Message]] = None,
+        explicit_input_tokens: Optional[int] = None,
+        expected_output_tokens: Optional[int] = None,
     ) -> TokenEstimate:
         """Estimate token usage for a request."""
 
@@ -44,11 +45,12 @@ class FallbackTokenEstimator:
         self,
         *,
         model: str,
-        prompt: str | None = None,
-        messages: Sequence[Message] | None = None,
-        explicit_input_tokens: int | None = None,
-        expected_output_tokens: int | None = None,
+        prompt: Optional[str] = None,
+        messages: Optional[Sequence[Message]] = None,
+        explicit_input_tokens: Optional[int] = None,
+        expected_output_tokens: Optional[int] = None,
     ) -> TokenEstimate:
+        """Estimate tokens from character counts, four characters per token."""
         del model
         if explicit_input_tokens is not None:
             input_tokens = explicit_input_tokens
@@ -77,18 +79,20 @@ class FallbackTokenEstimator:
 class LiteLLMTokenEstimator:
     """Use LiteLLM token counting, falling back with disclosed approximation."""
 
-    def __init__(self, fallback: TokenEstimator | None = None) -> None:
+    def __init__(self, fallback: Optional[TokenEstimator] = None):
+        """Store the fallback estimator to use if LiteLLM token counting fails."""
         self._fallback = fallback or FallbackTokenEstimator()
 
     def estimate(
         self,
         *,
         model: str,
-        prompt: str | None = None,
-        messages: Sequence[Message] | None = None,
-        explicit_input_tokens: int | None = None,
-        expected_output_tokens: int | None = None,
+        prompt: Optional[str] = None,
+        messages: Optional[Sequence[Message]] = None,
+        explicit_input_tokens: Optional[int] = None,
+        expected_output_tokens: Optional[int] = None,
     ) -> TokenEstimate:
+        """Estimate tokens via LiteLLM, falling back on any known tokenizer failure."""
         if explicit_input_tokens is not None:
             notes = ["Input token count supplied explicitly; it was not retokenized."]
             notes.append(
@@ -104,7 +108,7 @@ class LiteLLMTokenEstimator:
                 notes=tuple(notes),
             )
         try:
-            import litellm
+            litellm = importlib.import_module("litellm")
 
             kwargs: dict[str, object] = {"model": model}
             if messages is not None:
@@ -116,7 +120,7 @@ class LiteLLMTokenEstimator:
             count = litellm.token_counter(**kwargs)
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError("LiteLLM returned a malformed token count")
-        except Exception as exc:
+        except _token_counter_failure_types() as exc:
             fallback_estimate = self._fallback.estimate(
                 model=model,
                 prompt=prompt,
@@ -127,8 +131,7 @@ class LiteLLMTokenEstimator:
                 update={
                     "notes": (
                         *fallback_estimate.notes,
-                        f"LiteLLM token counting unavailable ({type(exc).__name__}); "
-                        "fallback used.",
+                        f"LiteLLM token counting unavailable ({type(exc).__name__}); fallback used.",
                     )
                 }
             )
@@ -147,7 +150,21 @@ class LiteLLMTokenEstimator:
         )
 
 
-def _character_count(prompt: str | None, messages: Sequence[Message] | None) -> int:
+def _token_counter_failure_types() -> tuple[type[Exception], ...]:
+    """Return the known exception types LiteLLM's tokenizer path can raise."""
+    litellm_exceptions = importlib.import_module("litellm.exceptions")
+    return (
+        *litellm_exceptions.LITELLM_EXCEPTION_TYPES,
+        ValueError,
+        LookupError,
+        TypeError,
+        ImportError,
+        AttributeError,
+    )
+
+
+def _character_count(prompt: Optional[str], messages: Optional[Sequence[Message]]) -> int:
+    """Count characters across a prompt string or message contents."""
     if prompt is not None:
         return len(prompt)
     if messages is None:

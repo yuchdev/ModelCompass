@@ -24,13 +24,14 @@ import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Optional
 
 from _common import REPO_ROOT, allow, append_log, edited_path, read_event
 
 _OPTIONAL_PIPE_RE = re.compile(r"\|\s*None\b")
 
 
-def _scan_left_type(line: str, bar_pos: int) -> tuple[int, str] | None:
+def _scan_left_type(line: str, bar_pos: int) -> Optional[tuple[int, str]]:
     """Given the index of ``|`` in ``<type> | None``, return
     (start_index, type_text) for the type expression immediately before it,
     honoring bracket nesting (e.g. `dict[str, int] | None`)."""
@@ -78,22 +79,45 @@ def _fix_line(line: str) -> tuple[str, int]:
 
 
 def _ensure_optional_import(text: str) -> str:
-    if re.search(r"^\s*from typing import .*\bOptional\b", text, re.MULTILINE):
-        return text
-
-    def _extend(m: re.Match) -> str:
-        names = m.group(1)
-        return m.group(0) if "Optional" in names else f"from typing import {names.rstrip()}, Optional"
-
-    new_text, n = re.subn(r"^from typing import (.+)$", _extend, text, count=1, flags=re.MULTILINE)
-    if n:
-        return new_text
-
     lines = text.splitlines(keepends=True)
-    insert_at = 0
+
+    # Look for an existing `from typing import ...` statement, single- or
+    # multi-line (parenthesized), and extend it in place if found.
     for i, line in enumerate(lines):
+        if not line.startswith("from typing import "):
+            continue
+        depth = line.count("(") - line.count(")")
+        end = i
+        while depth > 0:
+            end += 1
+            depth += lines[end].count("(") - lines[end].count(")")
+        block = "".join(lines[i : end + 1])
+        if re.search(r"\bOptional\b", block):
+            return text
+        if end == i:
+            # Single-line statement - append to the name list.
+            rest = line[len("from typing import ") :].rstrip("\n")
+            lines[i] = f"from typing import {rest}, Optional\n"
+            return "".join(lines)
+        # Multi-line statement - insert a new name just before the closing paren.
+        lines.insert(end, "    Optional,\n")
+        return "".join(lines)
+
+    # No existing typing import: insert a new one after the last top-level
+    # import, tracking paren depth so a multi-line (non-typing) import
+    # statement isn't split mid-statement.
+    insert_at = 0
+    paren_depth = 0
+    for i, line in enumerate(lines):
+        if paren_depth > 0:
+            paren_depth += line.count("(") - line.count(")")
+            if paren_depth <= 0:
+                insert_at = i + 1
+            continue
         if line.startswith(("import ", "from ")):
-            insert_at = i + 1
+            paren_depth = line.count("(") - line.count(")")
+            if paren_depth <= 0:
+                insert_at = i + 1
         elif line.strip() and not line.startswith("#") and insert_at > 0:
             break
     lines.insert(insert_at, "from typing import Optional\n")

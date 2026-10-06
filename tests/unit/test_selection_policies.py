@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Optional
 
 import pytest
 from hypothesis import given
@@ -48,6 +49,7 @@ def _profile(
     prompt_price: str = "0.000001",
     completion_price: str = "0.000002",
 ) -> ModelProfile:
+    """Build a fully capable model profile fixture with the given prompt and completion prices."""
     return ModelProfile(
         identity=ModelIdentity(provider="test", model_id=name, canonical_id=f"test:{name}"),
         capabilities=ModelCapabilities(
@@ -75,8 +77,9 @@ def _observation(
     *,
     success: bool = True,
     latency: int = 10,
-    quality: str | None = None,
+    quality: Optional[str] = None,
 ) -> Observation:
+    """Build an observation fixture for the given model with optional latency and quality."""
     return Observation(
         model_id=model_id,
         task="task",
@@ -87,7 +90,13 @@ def _observation(
 
 
 @pytest.mark.unit
-def test_wilson_bound_penalizes_small_samples_and_converges() -> None:
+def test_wilson_bound_penalizes_small_samples_and_converges():
+    """[Unit] Wilson bound penalizes small samples and converges: verifies the described behaviour holds.
+
+    Scenario: Exercises wilson bound penalizes small samples and converges and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     one_of_one = wilson_lower_bound(1, 1)
     nine_ninety_nine_of_thousand = wilson_lower_bound(999, 1000)
     assert Decimal("0.20") < one_of_one < Decimal("0.21")
@@ -99,11 +108,15 @@ def test_wilson_bound_penalizes_small_samples_and_converges() -> None:
 
 
 @pytest.mark.unit
-def test_wilson_uses_exact_success_count_for_fractional_rates() -> None:
+def test_wilson_uses_exact_success_count_for_fractional_rates():
+    """[Unit] Wilson uses exact success count for fractional rates: verifies the described behaviour holds.
+
+    Scenario: Exercises wilson uses exact success count for fractional rates and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile("two-of-three")
-    observations = [
-        _observation("test:two-of-three", success=success) for success in (True, True, False)
-    ]
+    observations = [_observation("test:two-of-three", success=success) for success in (True, True, False)]
     summary = summarize_observations("test:two-of-three", "task", observations)
     assert summary is not None
     assert summary.success_count == 2
@@ -118,7 +131,13 @@ def test_wilson_uses_exact_success_count_for_fractional_rates() -> None:
 
 
 @pytest.mark.unit
-def test_most_reliable_ranks_large_sample_over_perfect_single_observation() -> None:
+def test_most_reliable_ranks_large_sample_over_perfect_single_observation():
+    """[Unit] Most reliable ranks large sample over perfect single observation: verifies the described behaviour holds.
+
+    Scenario: Exercises most reliable ranks large sample over perfect single observation and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profiles = [_profile("one"), _profile("many")]
     observations = [_observation("test:one")]
     observations.extend(_observation("test:many", success=index < 999) for index in range(1000))
@@ -138,7 +157,13 @@ def test_most_reliable_ranks_large_sample_over_perfect_single_observation() -> N
 
 
 @pytest.mark.unit
-def test_quality_evidence_count_only_includes_scored_observations() -> None:
+def test_quality_evidence_count_only_includes_scored_observations():
+    """[Unit] Quality evidence count only includes scored observations: verifies the described behaviour holds.
+
+    Scenario: Exercises quality evidence count only includes scored observations and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile("quality-samples")
     observations = [
         Observation(
@@ -168,7 +193,13 @@ def test_quality_evidence_count_only_includes_scored_observations() -> None:
 
 
 @pytest.mark.unit
-def test_constraints_precede_ranking_and_empty_error_has_reason_counts() -> None:
+def test_constraints_precede_ranking_and_empty_error_has_reason_counts():
+    """[Unit] Constraints precede ranking and empty error has reason counts: verifies the described behaviour holds.
+
+    Scenario: Exercises constraints precede ranking and empty error has reason counts and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile("blocked")
     evidence = InMemoryQualityProvider(
         {
@@ -213,7 +244,13 @@ def test_constraints_precede_ranking_and_empty_error_has_reason_counts() -> None
 
 
 @pytest.mark.unit
-def test_rankability_is_not_reported_for_candidates_rejected_by_constraints() -> None:
+def test_rankability_is_not_reported_for_candidates_rejected_by_constraints():
+    """[Unit] Rankability is not reported for candidates rejected by constraints: verifies the described behaviour holds.
+
+    Scenario: Exercises rankability is not reported for candidates rejected by constraints and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     unpriced = _profile("unpriced").model_copy(update={"pricing": Pricing()})
     result = select_model(
         [unpriced],
@@ -230,7 +267,13 @@ def test_rankability_is_not_reported_for_candidates_rejected_by_constraints() ->
 
 
 @pytest.mark.unit
-def test_unknown_request_capabilities_are_not_duplicated_as_strict_constraints() -> None:
+def test_unknown_request_capabilities_are_not_duplicated_as_strict_constraints():
+    """[Unit] Unknown request capabilities are not duplicated as strict constraints: verifies the described behaviour holds.
+
+    Scenario: Exercises unknown request capabilities are not duplicated as strict constraints and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile("unknown").model_copy(update={"capabilities": ModelCapabilities()})
     request = RequestProfile(
         task="task",
@@ -246,22 +289,27 @@ def test_unknown_request_capabilities_are_not_duplicated_as_strict_constraints()
     )
 
     assert result.selected is not None
-    assert [item.reason_code for item in result.assessments[0].constraint_results] == [
-        "capability_requirements"
-    ]
+    assert [item.reason_code for item in result.assessments[0].constraint_results] == ["capability_requirements"]
     explicit = select_model(
         [profile],
         RequestProfile(),
         required_capabilities=("tools",),
         minimum_context=200_000,
     )
-    assert {
-        item.reason_code for item in explicit.assessments[0].constraint_results if not item.passed
-    } == {"required_capabilities", "minimum_context"}
+    assert {item.reason_code for item in explicit.assessments[0].constraint_results if not item.passed} == {
+        "required_capabilities",
+        "minimum_context",
+    }
 
 
 @pytest.mark.unit
-def test_task_observation_and_quality_timestamps_are_aware_and_normalized() -> None:
+def test_task_observation_and_quality_timestamps_are_aware_and_normalized():
+    """[Unit] Task observation and quality timestamps are aware and normalized: verifies the described behaviour holds.
+
+    Scenario: Exercises task observation and quality timestamps are aware and normalized and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     offset = datetime.fromisoformat("2026-01-01T02:00:00+02:00")
     observation = Observation(
         model_id="test:timestamp",
@@ -316,7 +364,13 @@ def test_task_observation_and_quality_timestamps_are_aware_and_normalized() -> N
 
 
 @pytest.mark.unit
-def test_quality_evidence_aggregation_handles_timestamp_offsets() -> None:
+def test_quality_evidence_aggregation_handles_timestamp_offsets():
+    """[Unit] Quality evidence aggregation handles timestamp offsets: verifies the described behaviour holds.
+
+    Scenario: Exercises quality evidence aggregation handles timestamp offsets and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     provider = BenchmarkQualityProvider(
         [
             QualityEvidence(
@@ -346,10 +400,14 @@ def test_quality_evidence_aggregation_handles_timestamp_offsets() -> None:
 
 
 @pytest.mark.unit
-def test_objective_policies_do_not_rank_missing_primary_metrics() -> None:
-    profile = _profile("missing", prompt_price="0", completion_price="0").model_copy(
-        update={"pricing": Pricing()}
-    )
+def test_objective_policies_do_not_rank_missing_primary_metrics():
+    """[Unit] Objective policies do not rank missing primary metrics: verifies the described behaviour holds.
+
+    Scenario: Exercises objective policies do not rank missing primary metrics and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
+    profile = _profile("missing", prompt_price="0", completion_price="0").model_copy(update={"pricing": Pricing()})
     request = RequestProfile(explicit_input_tokens=1, expected_output_tokens=1)
     cheapest = select_model([profile], request, policy=SelectionPolicy.CHEAPEST)
     fastest = select_model([profile], request, policy=SelectionPolicy.FASTEST)
@@ -363,7 +421,13 @@ def test_objective_policies_do_not_rank_missing_primary_metrics() -> None:
 
 
 @pytest.mark.unit
-def test_missing_metric_thresholds_can_be_allowed_explicitly() -> None:
+def test_missing_metric_thresholds_can_be_allowed_explicitly():
+    """[Unit] Missing metric thresholds can be allowed explicitly: verifies the described behaviour holds.
+
+    Scenario: Exercises missing metric thresholds can be allowed explicitly and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile("unknown-metrics")
     request = RequestProfile(
         explicit_input_tokens=1,
@@ -383,15 +447,19 @@ def test_missing_metric_thresholds_can_be_allowed_explicitly() -> None:
     )
     assert permissive.selected is not None
     assert permissive.selected.model_id == "test:unknown-metrics"
-    results = {
-        result.reason_code: result.passed for result in permissive.assessments[0].constraint_results
-    }
+    results = {result.reason_code: result.passed for result in permissive.assessments[0].constraint_results}
     assert results["minimum_quality"] is True
     assert results["maximum_latency"] is True
 
 
 @pytest.mark.unit
-def test_composable_constraints_report_pass_fail_evidence_and_validate_thresholds() -> None:
+def test_composable_constraints_report_pass_fail_evidence_and_validate_thresholds():
+    """[Unit] Composable constraints report pass fail evidence and validate thresholds: verifies the described behaviour holds.
+
+    Scenario: Exercises composable constraints report pass fail evidence and validate thresholds and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = _profile("gateway").model_copy(
         update={
             "endpoints": (
@@ -410,15 +478,9 @@ def test_composable_constraints_report_pass_fail_evidence_and_validate_threshold
         quality=Decimal("0.8"),
         reliability=Decimal("0.8"),
         latency_ms=Decimal("5"),
-        quality_evidence=MetricEvidence(
-            value=Decimal("0.8"), source="test", task="task", sample_count=5
-        ),
-        reliability_evidence=MetricEvidence(
-            value=Decimal("0.8"), source="observations", task="task", sample_count=5
-        ),
-        latency_evidence=MetricEvidence(
-            value=Decimal("5"), source="p95", task="task", sample_count=5
-        ),
+        quality_evidence=MetricEvidence(value=Decimal("0.8"), source="test", task="task", sample_count=5),
+        reliability_evidence=MetricEvidence(value=Decimal("0.8"), source="observations", task="task", sample_count=5),
+        latency_evidence=MetricEvidence(value=Decimal("5"), source="p95", task="task", sample_count=5),
     )
     passing = (
         MinimumQuality(Decimal("0.8")),
@@ -464,7 +526,13 @@ def test_composable_constraints_report_pass_fail_evidence_and_validate_threshold
 
 
 @pytest.mark.unit
-def test_all_policies_have_deterministic_tie_breaks_and_zero_cost_state() -> None:
+def test_all_policies_have_deterministic_tie_breaks_and_zero_cost_state():
+    """[Unit] All policies have deterministic tie breaks and zero cost state: verifies the described behaviour holds.
+
+    Scenario: Exercises all policies have deterministic tie breaks and zero cost state and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profiles = [_profile("z"), _profile("a")]
     observations = [
         _observation("test:z", latency=20, quality="0.8"),
@@ -522,7 +590,13 @@ def test_all_policies_have_deterministic_tie_breaks_and_zero_cost_state() -> Non
 
 
 @pytest.mark.unit
-def test_policy_tie_breakers_use_quality_cost_latency_and_canonical_id() -> None:
+def test_policy_tie_breakers_use_quality_cost_latency_and_canonical_id():
+    """[Unit] Policy tie breakers use quality cost latency and canonical id: verifies the described behaviour holds.
+
+    Scenario: Exercises policy tie breakers use quality cost latency and canonical id and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     request = RequestProfile(task="task", explicit_input_tokens=10, expected_output_tokens=10)
     best_profiles = [
         _profile("best-a"),
@@ -562,9 +636,7 @@ def test_policy_tie_breakers_use_quality_cost_latency_and_canonical_id() -> None
 
     tied_profiles = [_profile("tie-b"), _profile("tie-a")]
     tied_observations = [
-        _observation(model_id, latency=5)
-        for model_id in ("test:tie-b", "test:tie-a")
-        for _ in range(5)
+        _observation(model_id, latency=5) for model_id in ("test:tie-b", "test:tie-a") for _ in range(5)
     ]
     fastest = select_model(
         tied_profiles,
@@ -618,7 +690,13 @@ def test_policy_tie_breakers_use_quality_cost_latency_and_canonical_id() -> None
 
 
 @pytest.mark.unit
-def test_pareto_mapping_dominance_duplicates_and_missing_policy() -> None:
+def test_pareto_mapping_dominance_duplicates_and_missing_policy():
+    """[Unit] Pareto mapping dominance duplicates and missing policy: verifies the described behaviour holds.
+
+    Scenario: Exercises pareto mapping dominance duplicates and missing policy and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     candidates = [
         CandidateAssessment(
             model_id="tradeoff-a",
@@ -676,7 +754,13 @@ def test_pareto_mapping_dominance_duplicates_and_missing_policy() -> None:
     )
 )
 @pytest.mark.unit
-def test_pareto_frontier_has_no_dominated_member(points: list[tuple[int, int]]) -> None:
+def test_pareto_frontier_has_no_dominated_member(points: list[tuple[int, int]]):
+    """[Unit] Pareto frontier has no dominated member: verifies the described behaviour holds.
+
+    Scenario: Exercises pareto frontier has no dominated member and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     candidates = [
         CandidateAssessment(
             model_id=str(index),
@@ -703,10 +787,7 @@ def test_pareto_frontier_has_no_dominated_member(points: list[tuple[int, int]]) 
                 assert not (
                     other.quality >= candidate.quality
                     and other.expected_cost_usd <= candidate.expected_cost_usd
-                    and (
-                        other.quality > candidate.quality
-                        or other.expected_cost_usd < candidate.expected_cost_usd
-                    )
+                    and (other.quality > candidate.quality or other.expected_cost_usd < candidate.expected_cost_usd)
                 )
 
 
@@ -720,7 +801,13 @@ def test_pareto_frontier_has_no_dominated_member(points: list[tuple[int, int]]) 
 @pytest.mark.unit
 def test_adding_a_strictly_dominated_point_preserves_existing_frontier(
     points: list[tuple[int, int]],
-) -> None:
+):
+    """[Unit] Adding a strictly dominated point preserves existing frontier: verifies the described behaviour holds.
+
+    Scenario: Exercises adding a strictly dominated point preserves existing frontier and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     candidates = [
         CandidateAssessment(
             model_id=f"m{index}",
@@ -768,7 +855,13 @@ def test_adding_a_strictly_dominated_point_preserves_existing_frontier(
     )
 )
 @pytest.mark.unit
-def test_selector_always_returns_an_eligible_assessment(qualities: list[Decimal]) -> None:
+def test_selector_always_returns_an_eligible_assessment(qualities: list[Decimal]):
+    """[Unit] Selector always returns an eligible assessment: verifies the described behaviour holds.
+
+    Scenario: Exercises selector always returns an eligible assessment and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profiles = [_profile(f"m{index}") for index in range(len(qualities))]
     evidence = [
         QualityEvidence(

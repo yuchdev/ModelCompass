@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Optional, Union
 
 from model_compass.config import default_paths
 from model_compass.domain import (
@@ -51,32 +51,26 @@ class SQLiteObservationStore:
 
     def __init__(
         self,
-        path: str | Path | None = None,
+        path: Optional[Union[str, Path]] = None,
         *,
         payload_policy: PayloadPolicy = PayloadPolicy.NONE,
-    ) -> None:
-        self.path = (
-            str(path)
-            if path is not None
-            else str(default_paths().data_dir / "observations.sqlite3")
-        )
+    ):
+        """Configure the store without touching the filesystem."""
+        self.path = str(path) if path is not None else str(default_paths().data_dir / "observations.sqlite3")
         self.payload_policy = PayloadPolicy(payload_policy)
         self._lock = RLock()
-        self._memory_connection: sqlite3.Connection | None = None
+        self._memory_connection: Optional[sqlite3.Connection] = None
 
-    def record_observation(
-        self, observation: Observation, *, deduplicate: bool = False
-    ) -> Observation:
+    def record_observation(self, observation: Observation, *, deduplicate: bool = False) -> Observation:
+        """Record one observation and return its stored representation."""
         self.record_observations([observation], deduplicate=deduplicate)
         return _apply_payload_policy(observation, self.payload_policy)
 
-    def record(self, observation: TaskObservation) -> None:
+    def record(self, observation: TaskObservation):
         """Store a task-selection observation using the shared persistent schema."""
         self.record_observation(_stored_observation(observation))
 
-    def list(
-        self, *, model_id: str | None = None, task: str | None = None
-    ) -> builtins.list[TaskObservation]:
+    def list(self, *, model_id: Optional[str] = None, task: Optional[str] = None) -> builtins.list[TaskObservation]:
         """Return observations in the task-selection API's normalized shape."""
         return [
             _task_observation(row)
@@ -84,9 +78,8 @@ class SQLiteObservationStore:
             if row.latency_ms is not None
         ]
 
-    def record_observations(
-        self, observations: builtins.list[Observation], *, deduplicate: bool = False
-    ) -> int:
+    def record_observations(self, observations: builtins.list[Observation], *, deduplicate: bool = False) -> int:
+        """Record many observations and return the number newly stored."""
         if not observations:
             return 0
         prepared = [_apply_payload_policy(row, self.payload_policy) for row in observations]
@@ -95,8 +88,7 @@ class SQLiteObservationStore:
         with self._transaction() as connection:
             before = connection.total_changes
             connection.executemany(
-                f"{verb} INTO observations ({','.join(_OBSERVATION_COLUMNS)}) "
-                f"VALUES ({placeholders})",
+                f"{verb} INTO observations ({','.join(_OBSERVATION_COLUMNS)}) VALUES ({placeholders})",
                 [_observation_values(row) for row in prepared],
             )
             recorded = connection.total_changes - before
@@ -107,8 +99,7 @@ class SQLiteObservationStore:
             ]
             if payloads:
                 connection.executemany(
-                    f"{verb} INTO observation_payloads (observation_id, prompt, response) "
-                    "VALUES (?, ?, ?)",
+                    f"{verb} INTO observation_payloads (observation_id, prompt, response) VALUES (?, ?, ?)",
                     payloads,
                 )
             return recorded
@@ -116,14 +107,15 @@ class SQLiteObservationStore:
     def query_observations(
         self,
         *,
-        model_id: str | None = None,
-        task: str | None = None,
-        endpoint: str | None = None,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        limit: int | None = None,
+        model_id: Optional[str] = None,
+        task: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        limit: Optional[int] = None,
     ) -> builtins.list[Observation]:
+        """Return observations matching the given filters."""
         filters, values = _observation_filters(
             model_id=model_id,
             task=task,
@@ -151,13 +143,14 @@ class SQLiteObservationStore:
         self,
         model_id: str,
         *,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        task: str | None = None,
-        endpoint: str | None = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        task: Optional[str] = None,
+        endpoint: Optional[str] = None,
         min_samples: int = 5,
     ) -> ObservationSummary:
+        """Summarize recorded observations for one model."""
         rows = self.query_observations(
             model_id=model_id,
             task=task,
@@ -172,13 +165,14 @@ class SQLiteObservationStore:
         self,
         task: str,
         *,
-        model_id: str | None = None,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        endpoint: str | None = None,
+        model_id: Optional[str] = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        endpoint: Optional[str] = None,
         min_samples: int = 5,
     ) -> ObservationSummary:
+        """Summarize recorded observations for one task."""
         rows = self.query_observations(
             model_id=model_id,
             task=task,
@@ -190,6 +184,7 @@ class SQLiteObservationStore:
         return summarize_observations(rows, min_samples=min_samples)
 
     def record_benchmark_run(self, run: BenchmarkRun) -> BenchmarkRun:
+        """Record a benchmark run and return it."""
         with self._transaction() as connection:
             connection.execute(
                 """INSERT INTO benchmark_runs (
@@ -211,12 +206,14 @@ class SQLiteObservationStore:
         return run
 
     def query_benchmark_runs(self) -> builtins.list[BenchmarkRun]:
+        """Return all recorded benchmark runs."""
         with self._connection() as connection:
             self._ensure_schema(connection)
             rows = connection.execute("SELECT * FROM benchmark_runs ORDER BY run_id")
             return [_benchmark_run_from_row(row) for row in rows]
 
     def record_benchmark_result(self, result: BenchmarkResult) -> BenchmarkResult:
+        """Record a benchmark result and return it."""
         with self._transaction() as connection:
             connection.execute(
                 """INSERT INTO benchmark_results (
@@ -226,9 +223,8 @@ class SQLiteObservationStore:
             )
         return result
 
-    def query_benchmark_results(
-        self, *, run_id: str | None = None
-    ) -> builtins.list[BenchmarkResult]:
+    def query_benchmark_results(self, *, run_id: Optional[str] = None) -> builtins.list[BenchmarkResult]:
+        """Return benchmark results, optionally filtered by run."""
         sql = "SELECT * FROM benchmark_results"
         values: tuple[str, ...] = ()
         if run_id is not None:
@@ -240,8 +236,9 @@ class SQLiteObservationStore:
             return [_benchmark_result_from_row(row) for row in connection.execute(sql, values)]
 
     def record_quality_evidence(
-        self, evidence: QualityEvidence | TaskQualityEvidence
-    ) -> QualityEvidence | TaskQualityEvidence:
+        self, evidence: Union[QualityEvidence, TaskQualityEvidence]
+    ) -> Union[QualityEvidence, TaskQualityEvidence]:
+        """Record quality evidence and return the stored value."""
         if isinstance(evidence, TaskQualityEvidence):
             evidence = _stored_quality_evidence(evidence)
         with self._transaction() as connection:
@@ -265,17 +262,15 @@ class SQLiteObservationStore:
         return evidence
 
     def list_quality_evidence(
-        self, *, model_id: str | None = None, task: str | None = None
+        self, *, model_id: Optional[str] = None, task: Optional[str] = None
     ) -> builtins.list[TaskQualityEvidence]:
         """Return quality evidence in the task-selection API's normalized shape."""
-        return [
-            _task_quality_evidence(row)
-            for row in self.query_quality_evidence(model_id=model_id, task=task)
-        ]
+        return [_task_quality_evidence(row) for row in self.query_quality_evidence(model_id=model_id, task=task)]
 
     def query_quality_evidence(
-        self, *, model_id: str | None = None, task: str | None = None
+        self, *, model_id: Optional[str] = None, task: Optional[str] = None
     ) -> builtins.list[QualityEvidence]:
+        """Return quality evidence matching the given filters."""
         filters: builtins.list[str] = []
         values: builtins.list[str] = []
         if model_id is not None:
@@ -294,22 +289,25 @@ class SQLiteObservationStore:
             return [_quality_evidence_from_row(row) for row in rows]
 
     def delete_before(self, timestamp: datetime) -> int:
+        """Delete observations recorded before the timestamp."""
         cutoff = _timestamp(timestamp)
         with self._transaction() as connection:
             cursor = connection.execute("DELETE FROM observations WHERE timestamp < ?", (cutoff,))
             return cursor.rowcount
 
-    def vacuum(self) -> None:
+    def vacuum(self):
+        """Reclaim unused storage space."""
         with self._lock, self._connection() as connection:
             self._ensure_schema(connection)
             connection.execute("VACUUM")
 
     def export_jsonl(self) -> str:
+        """Export all records as JSONL text."""
         observations = self.query_observations()
         results = self.query_benchmark_results()
-        records = [
-            _envelope("observation", row.model_dump(mode="python")) for row in observations
-        ] + [_envelope("benchmark_result", row.model_dump(mode="python")) for row in results]
+        records = [_envelope("observation", row.model_dump(mode="python")) for row in observations] + [
+            _envelope("benchmark_result", row.model_dump(mode="python")) for row in results
+        ]
         records.sort(
             key=lambda record: (
                 record["record_type"],
@@ -317,12 +315,12 @@ class SQLiteObservationStore:
             )
         )
         return "".join(
-            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
-            for record in records
+            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n" for record in records
         )
 
     def import_jsonl(self, content: str, *, deduplicate: bool = False) -> int:
-        records: builtins.list[tuple[int, Observation | BenchmarkResult]] = []
+        """Import records from JSONL text and return the number imported."""
+        records: builtins.list[tuple[int, Union[Observation, BenchmarkResult]]] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
             if not line.strip():
                 continue
@@ -346,15 +344,11 @@ class SQLiteObservationStore:
                         raise ValueError("observation record requires observation_id and timestamp")
                     records.append((line_number, Observation.model_validate(record_data)))
                 elif kind == "benchmark_result":
-                    records.append(
-                        (line_number, BenchmarkResult.model_validate(envelope["record"]))
-                    )
+                    records.append((line_number, BenchmarkResult.model_validate(envelope["record"])))
                 else:
                     raise ValueError("unknown record_type")
             except (KeyError, TypeError, ValueError) as exc:
-                raise ImportRecordError(
-                    f"invalid JSONL record on line {line_number}: {exc}"
-                ) from exc
+                raise ImportRecordError(f"invalid JSONL record on line {line_number}: {exc}") from exc
 
         imported = 0
         seen_observation_ids: set[str] = set()
@@ -408,19 +402,16 @@ class SQLiteObservationStore:
                         seen_result_ids.add(result_id)
                     imported += 1
                 except (sqlite3.IntegrityError, ValueError) as exc:
-                    raise ImportRecordError(
-                        f"invalid JSONL record on line {line_number}: {exc}"
-                    ) from exc
+                    raise ImportRecordError(f"invalid JSONL record on line {line_number}: {exc}") from exc
         return imported
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Yield a configured SQLite connection for the configured path."""
         with self._lock:
             if self.path == ":memory:":
                 if self._memory_connection is None:
-                    self._memory_connection = sqlite3.connect(
-                        self.path, timeout=5, check_same_thread=False
-                    )
+                    self._memory_connection = sqlite3.connect(self.path, timeout=5, check_same_thread=False)
                     _configure(self._memory_connection)
                 yield self._memory_connection
             else:
@@ -441,6 +432,7 @@ class SQLiteObservationStore:
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection inside an immediate transaction."""
         with self._connection() as connection:
             self._ensure_schema(connection)
             connection.execute("BEGIN IMMEDIATE")
@@ -453,21 +445,17 @@ class SQLiteObservationStore:
                 connection.commit()
 
     @staticmethod
-    def _ensure_schema(connection: sqlite3.Connection) -> None:
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-        )
-        row = connection.execute(
-            "SELECT value FROM metadata WHERE key = 'schema_version'"
-        ).fetchone()
+    def _ensure_schema(connection: sqlite3.Connection):
+        """Create or migrate the database schema as needed."""
+        connection.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        row = connection.execute("SELECT value FROM metadata WHERE key = 'schema_version'").fetchone()
         try:
             version = int(row[0]) if row else 0
         except (TypeError, ValueError) as exc:
             raise ObservationStoreError("database schema version is corrupt") from exc
         if version > SCHEMA_VERSION:
             raise UnsupportedSchemaVersionError(
-                f"database schema version {version} is newer than supported version "
-                f"{SCHEMA_VERSION}"
+                f"database schema version {version} is newer than supported version {SCHEMA_VERSION}"
             )
         if version < 0:
             raise ObservationStoreError(f"invalid database schema version: {version}")
@@ -494,12 +482,14 @@ class SQLiteObservationStore:
 class ObservationStore(SQLiteObservationStore):
     """Eagerly initialized compatibility facade for the task-selection API."""
 
-    def __init__(self, database: str | Path) -> None:
+    def __init__(self, database: Union[str, Path]):
+        """Open the store and eagerly initialize its schema."""
         super().__init__(database)
         with self._connection() as connection:
             self._ensure_schema(connection)
 
-    def record(self, observation: TaskObservation) -> None:
+    def record(self, observation: TaskObservation):
+        """Store a task-selection observation, wrapping SQLite errors."""
         try:
             super().record(observation)
         except sqlite3.Error as exc:
@@ -509,7 +499,8 @@ class ObservationStore(SQLiteObservationStore):
 class InMemoryObservationStore:
     """No-persistence implementation used by tests and ephemeral applications."""
 
-    def __init__(self, *, payload_policy: PayloadPolicy = PayloadPolicy.NONE) -> None:
+    def __init__(self, *, payload_policy: PayloadPolicy = PayloadPolicy.NONE):
+        """Initialize empty in-memory record stores."""
         self.payload_policy = PayloadPolicy(payload_policy)
         self._observations: dict[str, Observation] = {}
         self._runs: dict[str, BenchmarkRun] = {}
@@ -517,19 +508,16 @@ class InMemoryObservationStore:
         self._evidence: dict[str, QualityEvidence] = {}
         self._lock = RLock()
 
-    def record_observation(
-        self, observation: Observation, *, deduplicate: bool = False
-    ) -> Observation:
+    def record_observation(self, observation: Observation, *, deduplicate: bool = False) -> Observation:
+        """Record one observation and return its stored representation."""
         self.record_observations([observation], deduplicate=deduplicate)
         return _apply_payload_policy(observation, self.payload_policy)
 
-    def record(self, observation: TaskObservation) -> None:
+    def record(self, observation: TaskObservation):
         """Store a task-selection observation using the in-memory schema."""
         self.record_observation(_stored_observation(observation))
 
-    def list(
-        self, *, model_id: str | None = None, task: str | None = None
-    ) -> builtins.list[TaskObservation]:
+    def list(self, *, model_id: Optional[str] = None, task: Optional[str] = None) -> builtins.list[TaskObservation]:
         """Return observations in the task-selection API's normalized shape."""
         return [
             _task_observation(row)
@@ -537,15 +525,12 @@ class InMemoryObservationStore:
             if row.latency_ms is not None
         ]
 
-    def record_observations(
-        self, observations: builtins.list[Observation], *, deduplicate: bool = False
-    ) -> int:
+    def record_observations(self, observations: builtins.list[Observation], *, deduplicate: bool = False) -> int:
+        """Record many observations and return the number newly stored."""
         prepared = [_apply_payload_policy(row, self.payload_policy) for row in observations]
         with self._lock:
             ids = [row.observation_id for row in prepared]
-            if not deduplicate and (
-                len(ids) != len(set(ids)) or set(ids) & self._observations.keys()
-            ):
+            if not deduplicate and (len(ids) != len(set(ids)) or set(ids) & self._observations.keys()):
                 raise ValueError("observation_id must be unique")
             before = len(self._observations)
             for row in prepared:
@@ -556,14 +541,15 @@ class InMemoryObservationStore:
     def query_observations(
         self,
         *,
-        model_id: str | None = None,
-        task: str | None = None,
-        endpoint: str | None = None,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        limit: int | None = None,
+        model_id: Optional[str] = None,
+        task: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        limit: Optional[int] = None,
     ) -> builtins.list[Observation]:
+        """Return observations matching the given filters."""
         _, _ = _observation_filters(
             model_id=model_id,
             task=task,
@@ -594,13 +580,14 @@ class InMemoryObservationStore:
         self,
         model_id: str,
         *,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        task: str | None = None,
-        endpoint: str | None = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        task: Optional[str] = None,
+        endpoint: Optional[str] = None,
         min_samples: int = 5,
     ) -> ObservationSummary:
+        """Summarize recorded observations for one model."""
         return summarize_observations(
             self.query_observations(
                 model_id=model_id,
@@ -617,13 +604,14 @@ class InMemoryObservationStore:
         self,
         task: str,
         *,
-        model_id: str | None = None,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        endpoint: str | None = None,
+        model_id: Optional[str] = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        endpoint: Optional[str] = None,
         min_samples: int = 5,
     ) -> ObservationSummary:
+        """Summarize recorded observations for one task."""
         return summarize_observations(
             self.query_observations(
                 model_id=model_id,
@@ -637,6 +625,7 @@ class InMemoryObservationStore:
         )
 
     def record_benchmark_run(self, run: BenchmarkRun) -> BenchmarkRun:
+        """Record a benchmark run and return it."""
         with self._lock:
             if run.run_id in self._runs:
                 raise ValueError("run_id must be unique")
@@ -644,10 +633,12 @@ class InMemoryObservationStore:
         return run
 
     def query_benchmark_runs(self) -> builtins.list[BenchmarkRun]:
+        """Return all recorded benchmark runs."""
         with self._lock:
             return sorted(self._runs.values(), key=lambda run: run.run_id)
 
     def record_benchmark_result(self, result: BenchmarkResult) -> BenchmarkResult:
+        """Record a benchmark result and return it."""
         key = (result.run_id, result.case_id, result.model_id)
         with self._lock:
             if key in self._results:
@@ -655,22 +646,18 @@ class InMemoryObservationStore:
             self._results[key] = result
         return result
 
-    def query_benchmark_results(
-        self, *, run_id: str | None = None
-    ) -> builtins.list[BenchmarkResult]:
+    def query_benchmark_results(self, *, run_id: Optional[str] = None) -> builtins.list[BenchmarkResult]:
+        """Return benchmark results, optionally filtered by run."""
         with self._lock:
             return sorted(
-                (
-                    result
-                    for result in self._results.values()
-                    if run_id is None or result.run_id == run_id
-                ),
+                (result for result in self._results.values() if run_id is None or result.run_id == run_id),
                 key=lambda row: (row.run_id, row.case_id, row.model_id),
             )
 
     def record_quality_evidence(
-        self, evidence: QualityEvidence | TaskQualityEvidence
-    ) -> QualityEvidence | TaskQualityEvidence:
+        self, evidence: Union[QualityEvidence, TaskQualityEvidence]
+    ) -> Union[QualityEvidence, TaskQualityEvidence]:
+        """Record quality evidence and return the stored value."""
         if isinstance(evidence, TaskQualityEvidence):
             evidence = _stored_quality_evidence(evidence)
         with self._lock:
@@ -680,29 +667,27 @@ class InMemoryObservationStore:
         return evidence
 
     def list_quality_evidence(
-        self, *, model_id: str | None = None, task: str | None = None
+        self, *, model_id: Optional[str] = None, task: Optional[str] = None
     ) -> builtins.list[TaskQualityEvidence]:
         """Return quality evidence in the task-selection API's normalized shape."""
-        return [
-            _task_quality_evidence(row)
-            for row in self.query_quality_evidence(model_id=model_id, task=task)
-        ]
+        return [_task_quality_evidence(row) for row in self.query_quality_evidence(model_id=model_id, task=task)]
 
     def query_quality_evidence(
-        self, *, model_id: str | None = None, task: str | None = None
+        self, *, model_id: Optional[str] = None, task: Optional[str] = None
     ) -> builtins.list[QualityEvidence]:
+        """Return quality evidence matching the given filters."""
         with self._lock:
             return sorted(
                 (
                     evidence
                     for evidence in self._evidence.values()
-                    if (model_id is None or evidence.model_id == model_id)
-                    and (task is None or evidence.task == task)
+                    if (model_id is None or evidence.model_id == model_id) and (task is None or evidence.task == task)
                 ),
                 key=lambda evidence: (evidence.observed_at, evidence.evidence_id),
             )
 
     def delete_before(self, timestamp: datetime) -> int:
+        """Delete observations recorded before the timestamp."""
         cutoff = _utc(timestamp)
         with self._lock:
             ids = [key for key, row in self._observations.items() if row.timestamp < cutoff]
@@ -710,16 +695,14 @@ class InMemoryObservationStore:
                 del self._observations[key]
             return len(ids)
 
-    def vacuum(self) -> None:
+    def vacuum(self):
+        """Reclaim unused storage space (a no-op for in-memory storage)."""
         return
 
     def export_jsonl(self) -> str:
-        records = [
-            _envelope("observation", row.model_dump(mode="python"))
-            for row in self.query_observations()
-        ] + [
-            _envelope("benchmark_result", row.model_dump(mode="python"))
-            for row in self.query_benchmark_results()
+        """Export all records as JSONL text."""
+        records = [_envelope("observation", row.model_dump(mode="python")) for row in self.query_observations()] + [
+            _envelope("benchmark_result", row.model_dump(mode="python")) for row in self.query_benchmark_results()
         ]
         records.sort(
             key=lambda record: (
@@ -728,12 +711,12 @@ class InMemoryObservationStore:
             )
         )
         return "".join(
-            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
-            for record in records
+            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n" for record in records
         )
 
     def import_jsonl(self, content: str, *, deduplicate: bool = False) -> int:
-        records: builtins.list[tuple[int, Observation | BenchmarkResult]] = []
+        """Import records from JSONL text and return the number imported."""
+        records: builtins.list[tuple[int, Union[Observation, BenchmarkResult]]] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
             if not line.strip():
                 continue
@@ -756,15 +739,11 @@ class InMemoryObservationStore:
                         raise ValueError("observation record requires observation_id and timestamp")
                     records.append((line_number, Observation.model_validate(record_data)))
                 elif envelope.get("record_type") == "benchmark_result":
-                    records.append(
-                        (line_number, BenchmarkResult.model_validate(envelope["record"]))
-                    )
+                    records.append((line_number, BenchmarkResult.model_validate(envelope["record"])))
                 else:
                     raise ValueError("unknown record_type")
             except (KeyError, TypeError, ValueError) as exc:
-                raise ImportRecordError(
-                    f"invalid JSONL record on line {line_number}: {exc}"
-                ) from exc
+                raise ImportRecordError(f"invalid JSONL record on line {line_number}: {exc}") from exc
         pending_observations: dict[str, Observation] = {}
         pending_results: dict[tuple[str, str, str], BenchmarkResult] = {}
         with self._lock:
@@ -776,21 +755,16 @@ class InMemoryObservationStore:
                     if observation_id in observation_ids:
                         if deduplicate:
                             continue
-                        raise ImportRecordError(
-                            f"invalid JSONL record on line {line_number}: duplicate observation_id"
-                        )
+                        raise ImportRecordError(f"invalid JSONL record on line {line_number}: duplicate observation_id")
                     observation_ids.add(observation_id)
-                    pending_observations[observation_id] = _apply_payload_policy(
-                        record, self.payload_policy
-                    )
+                    pending_observations[observation_id] = _apply_payload_policy(record, self.payload_policy)
                 else:
                     result_id = (record.run_id, record.case_id, record.model_id)
                     if result_id in result_ids:
                         if deduplicate:
                             continue
                         raise ImportRecordError(
-                            f"invalid JSONL record on line {line_number}: "
-                            "duplicate benchmark result identity"
+                            f"invalid JSONL record on line {line_number}: duplicate benchmark result identity"
                         )
                     result_ids.add(result_id)
                     pending_results[result_id] = record
@@ -825,14 +799,16 @@ _OBSERVATION_COLUMNS = (
 )
 
 
-def _configure(connection: sqlite3.Connection) -> None:
+def _configure(connection: sqlite3.Connection):
+    """Apply shared pragmas and the row factory to a connection."""
     connection.row_factory = sqlite3.Row
     connection.isolation_level = None
     connection.execute("PRAGMA busy_timeout = 5000")
     connection.execute("PRAGMA foreign_keys = ON")
 
 
-def _create_schema_v2(connection: sqlite3.Connection) -> None:
+def _create_schema_v2(connection: sqlite3.Connection):
+    """Create the version 2 tables and indexes."""
     connection.execute(
         """CREATE TABLE IF NOT EXISTS observations (
             observation_id TEXT PRIMARY KEY,
@@ -903,15 +879,12 @@ def _create_schema_v2(connection: sqlite3.Connection) -> None:
             metadata_json TEXT NOT NULL
         )"""
     )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS observations_model_time ON observations(model_id, timestamp)"
-    )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS observations_task_time ON observations(task, timestamp)"
-    )
+    connection.execute("CREATE INDEX IF NOT EXISTS observations_model_time ON observations(model_id, timestamp)")
+    connection.execute("CREATE INDEX IF NOT EXISTS observations_task_time ON observations(task, timestamp)")
 
 
-def _create_payload_table(connection: sqlite3.Connection) -> None:
+def _create_payload_table(connection: sqlite3.Connection):
+    """Create the observation payload table."""
     connection.execute(
         """CREATE TABLE IF NOT EXISTS observation_payloads (
             observation_id TEXT PRIMARY KEY REFERENCES observations(observation_id)
@@ -922,7 +895,8 @@ def _create_payload_table(connection: sqlite3.Connection) -> None:
     )
 
 
-def _migrate_schema_v1(connection: sqlite3.Connection) -> None:
+def _migrate_schema_v1(connection: sqlite3.Connection):
+    """Migrate a version 1 database to the current schema."""
     _create_payload_table(connection)
     columns = {row[1] for row in connection.execute("PRAGMA table_info(observations)")}
     if {"prompt", "response"} <= columns:
@@ -936,7 +910,8 @@ def _migrate_schema_v1(connection: sqlite3.Connection) -> None:
     _ensure_tables(connection)
 
 
-def _ensure_tables(connection: sqlite3.Connection) -> None:
+def _ensure_tables(connection: sqlite3.Connection):
+    """Verify that all required tables exist."""
     required = {
         "observations",
         "observation_payloads",
@@ -944,20 +919,20 @@ def _ensure_tables(connection: sqlite3.Connection) -> None:
         "benchmark_results",
         "quality_evidence",
     }
-    existing = {
-        row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    }
+    existing = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if not required <= existing:
         raise ObservationStoreError("database schema is incomplete or corrupt")
 
 
-def _timestamp(value: datetime | None) -> str | None:
+def _timestamp(value: Optional[datetime]) -> Optional[str]:
+    """Serialize a timezone-aware datetime to a UTC ISO string."""
     if value is None:
         return None
     return _utc(value).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _utc(value: datetime) -> datetime:
+    """Return value normalized to UTC, requiring an explicit timezone."""
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamps must include a timezone")
     return value.astimezone(UTC)
@@ -965,14 +940,15 @@ def _utc(value: datetime) -> datetime:
 
 def _observation_filters(
     *,
-    model_id: str | None,
-    task: str | None,
-    endpoint: str | None,
-    since: datetime | None,
-    recent: timedelta | None,
-    now_utc: datetime | None,
-    limit: int | None,
+    model_id: Optional[str],
+    task: Optional[str],
+    endpoint: Optional[str],
+    since: Optional[datetime],
+    recent: Optional[timedelta],
+    now_utc: Optional[datetime],
+    limit: Optional[int],
 ) -> tuple[builtins.list[str], builtins.list[Any]]:
+    """Build SQL filter clauses and bound values from query arguments."""
     if since is not None and recent is not None:
         raise ValueError("specify either since or recent, not both")
     if recent is not None and recent.total_seconds() < 0:
@@ -996,6 +972,7 @@ def _observation_filters(
 
 
 def _observation_values(row: Observation) -> tuple[Any, ...]:
+    """Return an observation's column values in storage order."""
     return (
         row.observation_id,
         _timestamp(row.timestamp),
@@ -1023,6 +1000,7 @@ def _observation_values(row: Observation) -> tuple[Any, ...]:
 
 
 def _observation_from_row(row: sqlite3.Row) -> Observation:
+    """Reconstruct an observation from a database row."""
     data = dict(row)
     data["timestamp"] = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
     data["success"] = bool(data["success"])
@@ -1034,6 +1012,7 @@ def _observation_from_row(row: sqlite3.Row) -> Observation:
 
 
 def _benchmark_result_values(result: BenchmarkResult) -> tuple[Any, ...]:
+    """Return a benchmark result's column values in storage order."""
     return (
         result.run_id,
         result.case_id,
@@ -1047,6 +1026,7 @@ def _benchmark_result_values(result: BenchmarkResult) -> tuple[Any, ...]:
 
 
 def _benchmark_result_from_row(row: sqlite3.Row) -> BenchmarkResult:
+    """Reconstruct a benchmark result from a database row."""
     data = dict(row)
     data["metadata"] = json.loads(data.pop("metadata_json"))
     for key in ("score", "cost", "latency_ms"):
@@ -1056,6 +1036,7 @@ def _benchmark_result_from_row(row: sqlite3.Row) -> BenchmarkResult:
 
 
 def _benchmark_run_from_row(row: sqlite3.Row) -> BenchmarkRun:
+    """Reconstruct a benchmark run from a database row."""
     data = dict(row)
     data["started_at"] = datetime.fromisoformat(data["started_at"].replace("Z", "+00:00"))
     if data["ended_at"] is not None:
@@ -1065,6 +1046,7 @@ def _benchmark_run_from_row(row: sqlite3.Row) -> BenchmarkRun:
 
 
 def _quality_evidence_from_row(row: sqlite3.Row) -> QualityEvidence:
+    """Reconstruct quality evidence from a database row."""
     data = dict(row)
     data["score"] = Decimal(data["score"])
     data["observed_at"] = datetime.fromisoformat(data["observed_at"].replace("Z", "+00:00"))
@@ -1076,6 +1058,7 @@ _COMPATIBILITY_METADATA_KEY = "__model_compass_task_selection__"
 
 
 def _stored_observation(observation: TaskObservation) -> Observation:
+    """Convert a task-selection observation into the stored shape."""
     return Observation(
         timestamp=observation.timestamp,
         model_id=observation.model_id,
@@ -1088,9 +1071,7 @@ def _stored_observation(observation: TaskObservation) -> Observation:
         latency_ms=Decimal(observation.latency_ms),
         metadata={
             _COMPATIBILITY_METADATA_KEY: {
-                "quality_score": str(observation.quality_score)
-                if observation.quality_score is not None
-                else None,
+                "quality_score": str(observation.quality_score) if observation.quality_score is not None else None,
                 "evaluator_type": observation.evaluator_type,
             }
         },
@@ -1098,13 +1079,10 @@ def _stored_observation(observation: TaskObservation) -> Observation:
 
 
 def _task_observation(observation: Observation) -> TaskObservation:
+    """Convert a stored observation into the task-selection shape."""
     compatibility_data = observation.metadata.get(_COMPATIBILITY_METADATA_KEY, {})
-    quality_score = (
-        compatibility_data.get("quality_score") if isinstance(compatibility_data, dict) else None
-    )
-    evaluator_type = (
-        compatibility_data.get("evaluator_type") if isinstance(compatibility_data, dict) else None
-    )
+    quality_score = compatibility_data.get("quality_score") if isinstance(compatibility_data, dict) else None
+    evaluator_type = compatibility_data.get("evaluator_type") if isinstance(compatibility_data, dict) else None
     return TaskObservation(
         model_id=observation.model_id,
         task=observation.task or "general",
@@ -1121,6 +1099,7 @@ def _task_observation(observation: Observation) -> TaskObservation:
 
 
 def _stored_quality_evidence(evidence: TaskQualityEvidence) -> QualityEvidence:
+    """Convert task-selection quality evidence into the stored shape."""
     return QualityEvidence(
         model_id=evidence.model_id,
         task=evidence.task,
@@ -1134,6 +1113,7 @@ def _stored_quality_evidence(evidence: TaskQualityEvidence) -> QualityEvidence:
 
 
 def _task_quality_evidence(evidence: QualityEvidence) -> TaskQualityEvidence:
+    """Convert stored quality evidence into the task-selection shape."""
     return TaskQualityEvidence(
         model_id=evidence.model_id,
         task=evidence.task or "general",
@@ -1147,27 +1127,28 @@ def _task_quality_evidence(evidence: QualityEvidence) -> TaskQualityEvidence:
 
 
 def _apply_payload_policy(row: Observation, policy: PayloadPolicy) -> Observation:
+    """Apply the payload policy, dropping or hashing prompt and response."""
     if policy == PayloadPolicy.FULL:
         return row
     fingerprint = row.request_fingerprint
     if policy == PayloadPolicy.HASH_ONLY and fingerprint is None and row.prompt is not None:
         fingerprint = fingerprint_request(row.prompt)
-    return row.model_copy(
-        update={"prompt": None, "response": None, "request_fingerprint": fingerprint}
-    )
+    return row.model_copy(update={"prompt": None, "response": None, "request_fingerprint": fingerprint})
 
 
-def fingerprint_request(payload: str | bytes) -> str:
+def fingerprint_request(payload: Union[str, bytes]) -> str:
     """Return a SHA-256 fingerprint; predictable inputs are not anonymized."""
     content = payload.encode("utf-8") if isinstance(payload, str) else payload
     return hashlib.sha256(content).hexdigest()
 
 
 def _json(value: Any) -> str:
+    """Serialize a value to deterministic compact JSON."""
     return json.dumps(_jsonable(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _jsonable(value: Any) -> Any:
+    """Recursively convert a value into JSON-serializable primitives."""
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
@@ -1180,6 +1161,7 @@ def _jsonable(value: Any) -> Any:
 
 
 def _envelope(record_type: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Wrap a record in a typed, versioned export envelope."""
     return {
         "record_type": record_type,
         "record": _jsonable(record),
@@ -1188,6 +1170,7 @@ def _envelope(record_type: str, record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _record_sort_key(record: dict[str, Any]) -> tuple[str, ...]:
+    """Return a stable sort key for an exported record."""
     if "observation_id" in record:
         return (record["timestamp"], record["observation_id"])
     return (record["run_id"], record["case_id"], record["model_id"])

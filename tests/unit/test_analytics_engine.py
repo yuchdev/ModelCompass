@@ -32,6 +32,7 @@ def make_profile(
     completion_price: str = "0.000002",
     tools: SupportStatus = SupportStatus.SUPPORTED,
 ) -> ModelProfile:
+    """Build a text-capable model profile fixture with the given pricing and tool support."""
     return ModelProfile(
         identity=ModelIdentity(provider="test", model_id=model, canonical_id=f"test:{model}"),
         capabilities=ModelCapabilities(
@@ -52,7 +53,13 @@ def make_profile(
 
 
 @pytest.mark.unit
-def test_cost_estimation_uses_decimal_rates_and_missing_token_counts() -> None:
+def test_cost_estimation_uses_decimal_rates_and_missing_token_counts():
+    """[Unit] Cost estimation uses decimal rates and missing token counts: verifies the described behaviour holds.
+
+    Scenario: Exercises cost estimation uses decimal rates and missing token counts and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = make_profile("cheap")
     request = RequestProfile(explicit_input_tokens=100, expected_output_tokens=20)
 
@@ -69,7 +76,13 @@ def test_cost_estimation_uses_decimal_rates_and_missing_token_counts() -> None:
 
 
 @pytest.mark.unit
-def test_selection_enforces_capabilities_quality_and_cost() -> None:
+def test_selection_enforces_capabilities_quality_and_cost():
+    """[Unit] Selection enforces capabilities quality and cost: verifies the described behaviour holds.
+
+    Scenario: Exercises selection enforces capabilities quality and cost and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = make_profile("cheap")
     request = RequestProfile(
         task="code_review",
@@ -113,7 +126,13 @@ def test_selection_enforces_capabilities_quality_and_cost() -> None:
 
 
 @pytest.mark.unit
-def test_unknown_capabilities_and_missing_cost_are_not_hard_match() -> None:
+def test_unknown_capabilities_and_missing_cost_are_not_hard_match():
+    """[Unit] Unknown capabilities and missing cost are not hard match: verifies the described behaviour holds.
+
+    Scenario: Exercises unknown capabilities and missing cost are not hard match and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     unknown = make_profile("unknown", tools=SupportStatus.UNKNOWN).model_copy(
         update={"capabilities": ModelCapabilities()}
     )
@@ -131,21 +150,21 @@ def test_unknown_capabilities_and_missing_cost_are_not_hard_match() -> None:
     unpriced = make_profile("unpriced").model_copy(update={"pricing": Pricing()})
     budgeted = select_model(
         [unpriced],
-        request.model_copy(
-            update={"requires_tools": False, "minimum_context": None, "max_cost_usd": Decimal("1")}
-        ),
+        request.model_copy(update={"requires_tools": False, "minimum_context": None, "max_cost_usd": Decimal("1")}),
     )
     assert budgeted.selected is None
 
 
 @pytest.mark.unit
-def test_partial_token_estimates_still_require_known_context() -> None:
+def test_partial_token_estimates_still_require_known_context():
+    """[Unit] Partial token estimates still require known context: verifies the described behaviour holds.
+
+    Scenario: Exercises partial token estimates still require known context and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     unknown_context = make_profile("unknown-context").model_copy(
-        update={
-            "capabilities": ModelCapabilities(
-                input_modalities=("text",), output_modalities=("text",)
-            )
-        }
+        update={"capabilities": ModelCapabilities(input_modalities=("text",), output_modalities=("text",))}
     )
     request = RequestProfile(explicit_input_tokens=100)
     assert select_model([unknown_context], request).selected is None
@@ -162,7 +181,13 @@ def test_partial_token_estimates_still_require_known_context() -> None:
 
 
 @pytest.mark.unit
-def test_policy_ranking_and_task_matched_summary() -> None:
+def test_policy_ranking_and_task_matched_summary():
+    """[Unit] Policy ranking and task matched summary: verifies the described behaviour holds.
+
+    Scenario: Exercises policy ranking and task matched summary and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     cheap = make_profile("cheap")
     quality = make_profile("quality", prompt_price="0.00001", completion_price="0.00001")
     observations = [
@@ -194,21 +219,13 @@ def test_policy_ranking_and_task_matched_summary() -> None:
     assert summarize_observations("test:cheap", "missing", observations) is None
 
     req = RequestProfile(task="code", explicit_input_tokens=10, expected_output_tokens=10)
-    by_cost = select_model(
-        [cheap, quality], req, policy=SelectionPolicy.CHEAPEST, observations=observations
-    )
-    by_quality = select_model(
-        [cheap, quality], req, policy=SelectionPolicy.BEST, observations=observations
-    )
-    by_latency = select_model(
-        [cheap, quality], req, policy=SelectionPolicy.FASTEST, observations=observations
-    )
+    by_cost = select_model([cheap, quality], req, policy=SelectionPolicy.CHEAPEST, observations=observations)
+    by_quality = select_model([cheap, quality], req, policy=SelectionPolicy.BEST, observations=observations)
+    by_latency = select_model([cheap, quality], req, policy=SelectionPolicy.FASTEST, observations=observations)
     by_reliability = select_model(
         [cheap, quality], req, policy=SelectionPolicy.MOST_RELIABLE, observations=observations
     )
-    efficient = select_model(
-        [cheap, quality], req, policy=SelectionPolicy.COST_EFFICIENT, observations=observations
-    )
+    efficient = select_model([cheap, quality], req, policy=SelectionPolicy.COST_EFFICIENT, observations=observations)
     assert by_cost.selected is not None
     assert by_cost.selected.model_id == "test:cheap"
     assert by_quality.selected is not None
@@ -220,7 +237,13 @@ def test_policy_ranking_and_task_matched_summary() -> None:
 
 
 @pytest.mark.unit
-def test_zero_cost_is_handled_as_best_cost_efficiency() -> None:
+def test_zero_cost_is_handled_as_best_cost_efficiency():
+    """[Unit] Zero cost is handled as best cost efficiency: verifies the described behaviour holds.
+
+    Scenario: Exercises zero cost is handled as best cost efficiency and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     free = make_profile("free", prompt_price="0", completion_price="0")
     paid = make_profile("paid")
     observations = [
@@ -250,7 +273,13 @@ def test_zero_cost_is_handled_as_best_cost_efficiency() -> None:
 
 
 @pytest.mark.unit
-def test_missing_quality_threshold_and_latency_threshold_reject_by_default() -> None:
+def test_missing_quality_threshold_and_latency_threshold_reject_by_default():
+    """[Unit] Missing quality threshold and latency threshold reject by default: verifies the described behaviour holds.
+
+    Scenario: Exercises missing quality threshold and latency threshold reject by default and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = make_profile("no-evidence")
     req = RequestProfile(
         explicit_input_tokens=1,
@@ -264,7 +293,13 @@ def test_missing_quality_threshold_and_latency_threshold_reject_by_default() -> 
 
 
 @pytest.mark.unit
-def test_benchmark_quality_evidence_is_weighted_and_task_scoped() -> None:
+def test_benchmark_quality_evidence_is_weighted_and_task_scoped():
+    """[Unit] Benchmark quality evidence is weighted and task scoped: verifies the described behaviour holds.
+
+    Scenario: Exercises benchmark quality evidence is weighted and task scoped and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = make_profile("tested")
     request = RequestProfile(
         task="code",
@@ -308,7 +343,13 @@ def test_benchmark_quality_evidence_is_weighted_and_task_scoped() -> None:
 
 
 @pytest.mark.unit
-def test_request_rejects_non_finite_money_and_quality() -> None:
+def test_request_rejects_non_finite_money_and_quality():
+    """[Unit] Request rejects non finite money and quality: verifies the described behaviour holds.
+
+    Scenario: Exercises request rejects non finite money and quality and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     with pytest.raises(ValueError, match="max_cost_usd"):
         RequestProfile(max_cost_usd=Decimal("NaN"))
     with pytest.raises(ValueError, match="min_quality"):
@@ -316,17 +357,17 @@ def test_request_rejects_non_finite_money_and_quality() -> None:
 
 
 @pytest.mark.unit
-def test_pareto_frontier_uses_selected_objectives_and_excludes_unknowns() -> None:
+def test_pareto_frontier_uses_selected_objectives_and_excludes_unknowns():
+    """[Unit] Pareto frontier uses selected objectives and excludes unknowns: verifies the described behaviour holds.
+
+    Scenario: Exercises pareto frontier uses selected objectives and excludes unknowns and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     candidates = [
-        CandidateAssessment(
-            model_id="a", eligible=True, quality=Decimal("0.8"), expected_cost_usd=Decimal("2")
-        ),
-        CandidateAssessment(
-            model_id="b", eligible=True, quality=Decimal("0.9"), expected_cost_usd=Decimal("3")
-        ),
-        CandidateAssessment(
-            model_id="c", eligible=True, quality=Decimal("0.7"), expected_cost_usd=Decimal("4")
-        ),
+        CandidateAssessment(model_id="a", eligible=True, quality=Decimal("0.8"), expected_cost_usd=Decimal("2")),
+        CandidateAssessment(model_id="b", eligible=True, quality=Decimal("0.9"), expected_cost_usd=Decimal("3")),
+        CandidateAssessment(model_id="c", eligible=True, quality=Decimal("0.7"), expected_cost_usd=Decimal("4")),
         CandidateAssessment(model_id="unknown", eligible=True, quality=Decimal("1")),
     ]
     frontier = pareto_frontier(candidates, [ParetoObjective.QUALITY, ParetoObjective.COST])
@@ -336,7 +377,13 @@ def test_pareto_frontier_uses_selected_objectives_and_excludes_unknowns() -> Non
 
 
 @pytest.mark.unit
-def test_cost_estimate_includes_request_fee_once() -> None:
+def test_cost_estimate_includes_request_fee_once():
+    """[Unit] Cost estimate includes request fee once: verifies the described behaviour holds.
+
+    Scenario: Exercises cost estimate includes request fee once and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = make_profile("fee")
     pricing = profile.pricing.model_copy(
         update={
@@ -352,7 +399,13 @@ def test_cost_estimate_includes_request_fee_once() -> None:
 
 
 @pytest.mark.unit
-def test_selection_rejects_model_with_small_max_output_limit() -> None:
+def test_selection_rejects_model_with_small_max_output_limit():
+    """[Unit] Selection rejects model with small max output limit: verifies the described behaviour holds.
+
+    Scenario: Exercises selection rejects model with small max output limit and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = make_profile("capped")
     capabilities = profile.capabilities.model_copy(update={"max_output_tokens": 1})
     profile = profile.model_copy(update={"capabilities": capabilities})

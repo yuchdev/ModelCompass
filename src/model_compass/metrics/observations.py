@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Iterable
 from decimal import Decimal
 from math import ceil
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -20,11 +20,11 @@ class LatencySummary(BaseModel):
 
     sample_count: int
     latency_sample_count: int
-    mean_latency_ms: Decimal | None
-    p50_latency_ms: Decimal | None
-    p95_latency_ms: Decimal | None
+    mean_latency_ms: Optional[Decimal]
+    p50_latency_ms: Optional[Decimal]
+    p95_latency_ms: Optional[Decimal]
     ttft_sample_count: int
-    mean_time_to_first_token_ms: Decimal | None
+    mean_time_to_first_token_ms: Optional[Decimal]
 
 
 class ReliabilitySummary(BaseModel):
@@ -34,7 +34,7 @@ class ReliabilitySummary(BaseModel):
 
     sample_count: int
     success_count: int
-    success_rate: Decimal | None
+    success_rate: Optional[Decimal]
     failure_categories: dict[str, int]
 
 
@@ -45,11 +45,11 @@ class CostSummary(BaseModel):
 
     sample_count: int
     actual_cost_count: int
-    total_actual_cost: Decimal | None
-    mean_actual_cost: Decimal | None
+    total_actual_cost: Optional[Decimal]
+    mean_actual_cost: Optional[Decimal]
     estimated_cost_count: int
-    total_estimated_cost: Decimal | None
-    mean_estimated_cost: Decimal | None
+    total_estimated_cost: Optional[Decimal]
+    mean_estimated_cost: Optional[Decimal]
     cost_basis: Literal["actual", "estimated", "mixed", "none"]
 
 
@@ -60,11 +60,11 @@ class UsageSummary(BaseModel):
 
     sample_count: int
     input_token_sample_count: int
-    total_input_tokens: int | None
-    average_input_tokens: Decimal | None
+    total_input_tokens: Optional[int]
+    average_input_tokens: Optional[Decimal]
     output_token_sample_count: int
-    total_output_tokens: int | None
-    average_output_tokens: Decimal | None
+    total_output_tokens: Optional[int]
+    average_output_tokens: Optional[Decimal]
 
 
 class ObservationSummary(BaseModel):
@@ -99,9 +99,9 @@ def summarize_observations(
     ttfts = [row.time_to_first_token_ms for row in rows if row.time_to_first_token_ms is not None]
     if len(latencies) >= min_samples:
         ordered_latency = sorted(latencies)
-        mean_latency: Decimal | None = _mean(latencies)
-        p50: Decimal | None = _nearest_rank(ordered_latency, 0.50)
-        p95: Decimal | None = _nearest_rank(ordered_latency, 0.95)
+        mean_latency: Optional[Decimal] = _mean(latencies)
+        p50: Optional[Decimal] = _nearest_rank(ordered_latency, 0.50)
+        p95: Optional[Decimal] = _nearest_rank(ordered_latency, 0.95)
     else:
         mean_latency = None
         p50 = None
@@ -109,9 +109,7 @@ def summarize_observations(
     mean_ttft = _mean(ttfts) if len(ttfts) >= min_samples else None
 
     successes = sum(row.success for row in rows)
-    failure_categories = Counter(
-        row.failure_category for row in rows if not row.success and row.failure_category
-    )
+    failure_categories = Counter(row.failure_category for row in rows if not row.success and row.failure_category)
     reliability = ReliabilitySummary(
         sample_count=len(rows),
         success_count=successes,
@@ -171,12 +169,15 @@ def summarize_observations(
 
 
 def _mean(values: list[Decimal]) -> Decimal:
+    """Return the arithmetic mean of a non-empty list of Decimals."""
     return sum(values, Decimal(0)) / Decimal(len(values))
 
 
 def _mean_ints(values: list[int]) -> Decimal:
+    """Return the arithmetic mean of a non-empty list of ints as a Decimal."""
     return Decimal(sum(values)) / Decimal(len(values))
 
 
 def _nearest_rank(values: list[Decimal], quantile: float) -> Decimal:
+    """Return the nearest-rank quantile of a sorted list of Decimals."""
     return values[max(0, ceil(quantile * len(values)) - 1)]

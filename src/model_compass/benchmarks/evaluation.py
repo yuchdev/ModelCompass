@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -13,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from model_compass.exceptions import BenchmarkError
 from model_compass.metrics import QualityEvidence
+
+_logger = logging.getLogger(__name__)
 
 
 class EvaluatorType(StrEnum):
@@ -94,9 +97,7 @@ def evaluate_benchmark(
     case_ids = [case.case_id for case in dataset.cases]
     duplicates = sorted({case_id for case_id in case_ids if case_ids.count(case_id) > 1})
     if duplicates:
-        raise BenchmarkError(
-            f"benchmark dataset contains duplicate case ids: {', '.join(duplicates)}"
-        )
+        raise BenchmarkError(f"benchmark dataset contains duplicate case ids: {', '.join(duplicates)}")
     unknown = set(outputs) - {case.case_id for case in dataset.cases}
     if unknown:
         raise BenchmarkError(f"outputs contain unknown case ids: {', '.join(sorted(unknown))}")
@@ -104,8 +105,7 @@ def evaluate_benchmark(
     results = tuple(
         CaseEvaluation(
             case_id=case.case_id,
-            passed=case.case_id in outputs
-            and _matches(dataset.evaluator, case.expected_output, outputs[case.case_id]),
+            passed=case.case_id in outputs and _matches(dataset.evaluator, case.expected_output, outputs[case.case_id]),
         )
         for case in dataset.cases
     )
@@ -123,6 +123,7 @@ def evaluate_benchmark(
 
 
 def _matches(evaluator: EvaluatorType, expected: str, actual: str) -> bool:
+    """Return whether the actual output satisfies the expected value for an evaluator."""
     if evaluator == EvaluatorType.EXACT:
         return expected == actual
     if evaluator == EvaluatorType.REGEX:
@@ -134,5 +135,6 @@ def _matches(evaluator: EvaluatorType, expected: str, actual: str) -> bool:
         try:
             return bool(json.loads(expected) == json.loads(actual))
         except (json.JSONDecodeError, TypeError):
+            _logger.debug("Treating non-matching JSON evaluator case as a mismatch")
             return False
     raise BenchmarkError(f"unsupported evaluator: {evaluator}")

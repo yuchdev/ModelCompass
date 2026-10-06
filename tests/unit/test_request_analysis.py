@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Optional
 
 import pytest
 from hypothesis import given
@@ -33,15 +34,18 @@ from model_compass.selection import (
 
 
 class _ModelSpecificEstimator:
+    """Token estimator stub that returns a larger count for the large-tokenizer model."""
+
     def estimate(
         self,
         *,
         model: str,
-        prompt: str | None = None,
-        messages: Sequence[Message] | None = None,
-        explicit_input_tokens: int | None = None,
-        expected_output_tokens: int | None = None,
+        prompt: Optional[str] = None,
+        messages: Optional[Sequence[Message]] = None,
+        explicit_input_tokens: Optional[int] = None,
+        expected_output_tokens: Optional[int] = None,
     ) -> TokenEstimate:
+        """Return a fixed token estimate keyed on the model identifier."""
         del prompt, messages, explicit_input_tokens, expected_output_tokens
         return TokenEstimate(
             input_tokens=100 if model == "large-tokenizer" else 1,
@@ -53,9 +57,10 @@ class _ModelSpecificEstimator:
 
 def _model(
     *,
-    capabilities: ModelCapabilities | None = None,
-    pricing: Pricing | None = None,
+    capabilities: Optional[ModelCapabilities] = None,
+    pricing: Optional[Pricing] = None,
 ) -> ModelProfile:
+    """Build a minimal model profile fixture with optional capabilities and pricing."""
     now = datetime(2026, 1, 1, tzinfo=UTC)
     return ModelProfile(
         identity=ModelIdentity(provider="test", model_id="model", canonical_id="test:model"),
@@ -78,13 +83,25 @@ def _model(
         ("max_latency_ms", -1),
     ],
 )
-def test_profile_rejects_invalid_values(field: str, value: object) -> None:
+def test_profile_rejects_invalid_values(field: str, value: object):
+    """[Unit] Profile rejects invalid values: verifies the described behaviour holds.
+
+    Scenario: Exercises profile rejects invalid values and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     with pytest.raises(ValidationError):
         RequestProfile.model_validate({field: value})
 
 
 @pytest.mark.unit
-def test_request_inference_and_explicit_precedence() -> None:
+def test_request_inference_and_explicit_precedence():
+    """[Unit] Request inference and explicit precedence: verifies the described behaviour holds.
+
+    Scenario: Exercises request inference and explicit precedence and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = build_request_profile(
         prompt="Describe this",
         messages=[
@@ -114,7 +131,13 @@ def test_request_inference_and_explicit_precedence() -> None:
 
 
 @pytest.mark.unit
-def test_request_profile_infers_image_and_deterministic_minimum_context() -> None:
+def test_request_profile_infers_image_and_deterministic_minimum_context():
+    """[Unit] Request profile infers image and deterministic minimum context: verifies the described behaviour holds.
+
+    Scenario: Exercises request profile infers image and deterministic minimum context and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     profile = RequestProfile.from_request(
         messages=[
             {
@@ -183,14 +206,26 @@ def test_capability_hard_rejections(
     profile: RequestProfile,
     eligible: bool,
     reason: str,
-) -> None:
+):
+    """[Unit] Capability hard rejections: verifies the described behaviour holds.
+
+    Scenario: Exercises capability hard rejections and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     result = check_eligibility(capabilities, profile)
     assert result.eligible is eligible
     assert any(reason in item for item in result.reasons)
 
 
 @pytest.mark.unit
-def test_unknown_capabilities_follow_policy_and_price_is_not_a_capability() -> None:
+def test_unknown_capabilities_follow_policy_and_price_is_not_a_capability():
+    """[Unit] Unknown capabilities follow policy and price is not a capability: verifies the described behaviour holds.
+
+    Scenario: Exercises unknown capabilities follow policy and price is not a capability and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     model = _model(pricing=Pricing())
     request = RequestProfile(input_modalities=frozenset({"text"}), requires_tools=True)
     rejected = check_eligibility(model, request)
@@ -203,7 +238,13 @@ def test_unknown_capabilities_follow_policy_and_price_is_not_a_capability() -> N
 
 
 @pytest.mark.unit
-def test_explicit_and_approximate_token_estimates_are_disclosed() -> None:
+def test_explicit_and_approximate_token_estimates_are_disclosed():
+    """[Unit] Explicit and approximate token estimates are disclosed: verifies the described behaviour holds.
+
+    Scenario: Exercises explicit and approximate token estimates are disclosed and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     estimator = FallbackTokenEstimator()
     approximate = estimator.estimate(model="model", prompt="abcdefgh")
     explicit = estimator.estimate(
@@ -217,7 +258,13 @@ def test_explicit_and_approximate_token_estimates_are_disclosed() -> None:
 
 
 @pytest.mark.unit
-def test_comparison_ranks_using_its_per_model_prompt_cost_estimates() -> None:
+def test_comparison_ranks_using_its_per_model_prompt_cost_estimates():
+    """[Unit] Comparison ranks using its per model prompt cost estimates: verifies the described behaviour holds.
+
+    Scenario: Exercises comparison ranks using its per model prompt cost estimates and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     pricing = Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal("0.01"))})
     large = _model(pricing=pricing).model_copy(
         update={
@@ -255,7 +302,13 @@ def test_comparison_ranks_using_its_per_model_prompt_cost_estimates() -> None:
 
 
 @pytest.mark.unit
-def test_comparison_propagates_allow_unknown_policy_to_all_selection_constraints() -> None:
+def test_comparison_propagates_allow_unknown_policy_to_all_selection_constraints():
+    """[Unit] Comparison propagates allow unknown policy to all selection constraints: verifies the described behaviour holds.
+
+    Scenario: Exercises comparison propagates allow unknown policy to all selection constraints and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     model = _model()
     request = RequestProfile(
         explicit_input_tokens=1,
@@ -284,7 +337,13 @@ def test_comparison_propagates_allow_unknown_policy_to_all_selection_constraints
 
 
 @pytest.mark.unit
-def test_cost_components_cache_reasoning_fixed_fee_and_override() -> None:
+def test_cost_components_cache_reasoning_fixed_fee_and_override():
+    """[Unit] Cost components cache reasoning fixed fee and override: verifies the described behaviour holds.
+
+    Scenario: Exercises cost components cache reasoning fixed fee and override and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     pricing = Pricing(
         components={
             key: PriceComponent(key=key, amount=Decimal(amount))
@@ -328,13 +387,17 @@ def test_cost_components_cache_reasoning_fixed_fee_and_override() -> None:
 
 
 @pytest.mark.unit
-def test_missing_price_is_incomplete_but_free_price_is_explicit_zero() -> None:
+def test_missing_price_is_incomplete_but_free_price_is_explicit_zero():
+    """[Unit] Missing price is incomplete but free price is explicit zero: verifies the described behaviour holds.
+
+    Scenario: Exercises missing price is incomplete but free price is explicit zero and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     token_estimate = TokenEstimate(input_tokens=10, output_tokens=0, source="explicit", exact=True)
     missing = estimate_cost(_model(), token_estimate)
     free = estimate_cost(
-        _model(
-            pricing=Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal(0))})
-        ),
+        _model(pricing=Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal(0))})),
         token_estimate,
     )
     assert missing.total == 0
@@ -345,7 +408,13 @@ def test_missing_price_is_incomplete_but_free_price_is_explicit_zero() -> None:
 
 
 @pytest.mark.unit
-def test_cost_estimate_rejects_invalid_subusage_and_non_usd_price() -> None:
+def test_cost_estimate_rejects_invalid_subusage_and_non_usd_price():
+    """[Unit] Cost estimate rejects invalid subusage and non usd price: verifies the described behaviour holds.
+
+    Scenario: Exercises cost estimate rejects invalid subusage and non usd price and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     token_estimate = TokenEstimate(input_tokens=10, output_tokens=0, source="explicit", exact=True)
     with pytest.raises(ValueError, match="cached input"):
         estimate_cost(
@@ -355,11 +424,7 @@ def test_cost_estimate_rejects_invalid_subusage_and_non_usd_price() -> None:
         )
     foreign = estimate_cost(
         _model(
-            pricing=Pricing(
-                components={
-                    "prompt": PriceComponent(key="prompt", amount=Decimal("0.01"), currency="EUR")
-                }
-            )
+            pricing=Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal("0.01"), currency="EUR")})
         ),
         token_estimate,
     )
@@ -368,10 +433,14 @@ def test_cost_estimate_rejects_invalid_subusage_and_non_usd_price() -> None:
 
 
 @pytest.mark.unit
-def test_cost_ceiling_rejects_known_partial_total_above_limit() -> None:
-    model = _model(
-        pricing=Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal("0.2"))})
-    )
+def test_cost_ceiling_rejects_known_partial_total_above_limit():
+    """[Unit] Cost ceiling rejects known partial total above limit: verifies the described behaviour holds.
+
+    Scenario: Exercises cost ceiling rejects known partial total above limit and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
+    model = _model(pricing=Pricing(components={"prompt": PriceComponent(key="prompt", amount=Decimal("0.2"))}))
     report = compare_models(
         [model],
         RequestProfile(explicit_input_tokens=10, max_cost_usd=Decimal("1")),
@@ -391,9 +460,13 @@ def test_cost_ceiling_rejects_known_partial_total_above_limit() -> None:
     output_tokens=st.integers(min_value=0, max_value=100_000),
     price=st.decimals(min_value=0, max_value=100, places=4, allow_nan=False),
 )
-def test_cost_is_nonnegative_and_increases_with_positive_usage(
-    input_tokens: int, output_tokens: int, price: Decimal
-) -> None:
+def test_cost_is_nonnegative_and_increases_with_positive_usage(input_tokens: int, output_tokens: int, price: Decimal):
+    """[Unit] Cost is nonnegative and increases with positive usage: verifies the described behaviour holds.
+
+    Scenario: Exercises cost is nonnegative and increases with positive usage and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     model = _model(
         pricing=Pricing(
             components={
@@ -402,9 +475,7 @@ def test_cost_is_nonnegative_and_increases_with_positive_usage(
             }
         )
     )
-    estimate = TokenEstimate(
-        input_tokens=input_tokens, output_tokens=output_tokens, source="explicit", exact=True
-    )
+    estimate = TokenEstimate(input_tokens=input_tokens, output_tokens=output_tokens, source="explicit", exact=True)
     cost = estimate_cost(model, estimate)
     more_input_cost = estimate_cost(
         model,
@@ -415,7 +486,13 @@ def test_cost_is_nonnegative_and_increases_with_positive_usage(
 
 
 @pytest.mark.unit
-def test_builtin_and_custom_scenarios() -> None:
+def test_builtin_and_custom_scenarios():
+    """[Unit] Builtin and custom scenarios: verifies the described behaviour holds.
+
+    Scenario: Exercises builtin and custom scenarios and asserts the expected outcome.
+    Boundaries: Pure in-process logic over real domain objects; no network, disk, or faked collaborators.
+    On failure, first check: the failing assertion and the value it compares against.
+    """
     scenario = workload_scenario("agent-step")
     assert scenario.profile.requires_tools is True
     assert scenario.profile.explicit_input_tokens == 2048

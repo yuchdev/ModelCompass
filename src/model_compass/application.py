@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional, Union
 
 from model_compass.benchmarks import BenchmarkReport
 from model_compass.catalogs import CatalogService
@@ -37,17 +37,17 @@ class AnalyticsFacade:
     """Small public facade for application features."""
 
     catalog: CatalogService = field(default_factory=CatalogService)
-    observation_store: ObservationStoreProtocol | None = None
+    observation_store: Optional[ObservationStoreProtocol] = None
 
     def summarize_model(
         self,
         model_id: str,
         *,
-        since: datetime | None = None,
-        recent: timedelta | None = None,
-        now_utc: datetime | None = None,
-        task: str | None = None,
-        endpoint: str | None = None,
+        since: Optional[datetime] = None,
+        recent: Optional[timedelta] = None,
+        now_utc: Optional[datetime] = None,
+        task: Optional[str] = None,
+        endpoint: Optional[str] = None,
         min_samples: int = 5,
     ) -> ObservationSummary:
         """Return empirical metrics using the injected storage protocol."""
@@ -66,7 +66,7 @@ class AnalyticsFacade:
         profile: ModelProfile,
         request: RequestProfile,
         *,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> RequestCostEstimate:
         """Estimate the Decimal cost for a request and model profile."""
         return estimate_request_cost(profile, request, now_utc=now_utc)
@@ -77,16 +77,16 @@ class AnalyticsFacade:
         request: RequestProfile,
         *,
         policy: SelectionPolicy = SelectionPolicy.BEST,
-        objective: SelectionPolicy | str | None = None,
-        missing_data: SelectionDataPolicy | None = None,
-        quality_provider: QualityProvider | None = None,
+        objective: Optional[Union[SelectionPolicy, str]] = None,
+        missing_data: Optional[SelectionDataPolicy] = None,
+        quality_provider: Optional[QualityProvider] = None,
         constraints: tuple[SelectionConstraint, ...] = (),
-        min_quality: Decimal | None = None,
-        max_cost_usd: Decimal | None = None,
-        max_latency_ms: int | Decimal | None = None,
-        min_reliability: Decimal | None = None,
+        min_quality: Optional[Decimal] = None,
+        max_cost_usd: Optional[Decimal] = None,
+        max_latency_ms: Optional[Union[int, Decimal]] = None,
+        min_reliability: Optional[Decimal] = None,
         required_capabilities: tuple[str, ...] = (),
-        minimum_context: int | None = None,
+        minimum_context: Optional[int] = None,
         allowed_model_ids: tuple[str, ...] = (),
         blocked_model_ids: tuple[str, ...] = (),
         allowed_gateways: tuple[str, ...] = (),
@@ -94,7 +94,7 @@ class AnalyticsFacade:
         allowed_providers: tuple[str, ...] = (),
         blocked_providers: tuple[str, ...] = (),
         raise_on_empty: bool = False,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> SelectionResult:
         """Select a model using task-matched evidence and composable constraints."""
         task = request.task or "general"
@@ -124,17 +124,15 @@ class AnalyticsFacade:
             now_utc=now_utc,
         )
 
-    def record_benchmark(self, report: BenchmarkReport) -> None:
+    def record_benchmark(self, report: BenchmarkReport):
         """Persist benchmark quality and provenance separately from execution outcomes."""
         self._observations().record_quality_evidence(report.to_quality_evidence())
 
-    def record_observation(self, observation: Observation) -> None:
+    def record_observation(self, observation: Observation):
         """Persist one aggregate execution observation."""
         self._observations().record(observation)
 
-    def list_observations(
-        self, *, model_id: str | None = None, task: str | None = None
-    ) -> list[Observation]:
+    def list_observations(self, *, model_id: Optional[str] = None, task: Optional[str] = None) -> list[Observation]:
         """Return locally recorded aggregate observations."""
         return self._observations().list(model_id=model_id, task=task)
 
@@ -142,7 +140,7 @@ class AnalyticsFacade:
         self,
         request: CompletionRequest,
         *,
-        backend: ExecutionBackend | None = None,
+        backend: Optional[ExecutionBackend] = None,
     ) -> ExecutionResult:
         """Run a completion and persist only aggregate usage observations."""
         try:
@@ -162,25 +160,27 @@ class AnalyticsFacade:
         return result
 
     def _observations(self) -> ObservationStoreProtocol:
+        """Return the observation store, creating the default SQLite store on demand."""
         if self.observation_store is None:
-            self.observation_store = SQLiteObservationStore(
-                default_paths().data_dir / "observations.sqlite3"
-            )
+            self.observation_store = SQLiteObservationStore(default_paths().data_dir / "observations.sqlite3")
         return self.observation_store
 
 
 class _LazyAnalyticsFacade:
     """Lazily construct the default analytics facade."""
 
-    def __init__(self) -> None:
-        self._instance: AnalyticsFacade | None = None
+    def __init__(self):
+        """Initialize the lazy holder without constructing the facade."""
+        self._instance: Optional[AnalyticsFacade] = None
 
     def _get(self) -> AnalyticsFacade:
+        """Return the cached facade, constructing it on first access."""
         if self._instance is None:
             self._instance = AnalyticsFacade()
         return self._instance
 
     def __getattr__(self, item: str) -> Any:
+        """Delegate attribute access to the lazily constructed facade."""
         return getattr(self._get(), item)
 
 

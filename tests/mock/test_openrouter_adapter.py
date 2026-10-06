@@ -14,7 +14,13 @@ from model_compass.catalogs.openrouter import OpenRouterCatalogAdapter
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_successful_fetch(tmp_path: Path) -> None:
+async def test_openrouter_successful_fetch(tmp_path: Path):
+    """[Local] successful fetch: a 200 payload yields a snapshot with models.
+
+    Scenario: Mocks the models endpoint with one entry and refreshes the adapter forcefully.
+    Boundaries: Real adapter and cache dir; the HTTP call is faked with respx.
+    On failure, first check: route invocation and snapshot population from the mocked payload.
+    """
     route = respx.get("https://openrouter.ai/api/v1/models").mock(
         return_value=httpx.Response(
             200,
@@ -39,7 +45,13 @@ async def test_openrouter_successful_fetch(tmp_path: Path) -> None:
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_timeout_error(tmp_path: Path) -> None:
+async def test_openrouter_timeout_error(tmp_path: Path):
+    """[Local] timeout maps to fetch error: a connect timeout raises CatalogFetchError.
+
+    Scenario: Mocks the endpoint to raise a connect timeout and forces a refresh.
+    Boundaries: Real adapter and cache dir; the HTTP transport is faked with respx.
+    On failure, first check: timeout handling translating into CatalogFetchError.
+    """
     respx.get("https://openrouter.ai/api/v1/models").mock(side_effect=httpx.ConnectTimeout("boom"))
 
     adapter = OpenRouterCatalogAdapter(cache_dir=tmp_path)
@@ -51,10 +63,14 @@ async def test_openrouter_timeout_error(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 @respx.mock
 @pytest.mark.parametrize("status_code", [401, 403, 429, 500])
-async def test_openrouter_http_errors(tmp_path: Path, status_code: int) -> None:
-    respx.get("https://openrouter.ai/api/v1/models").mock(
-        return_value=httpx.Response(status_code, json={})
-    )
+async def test_openrouter_http_errors(tmp_path: Path, status_code: int):
+    """[Local] http errors map to fetch error: non-2xx statuses raise CatalogFetchError.
+
+    Scenario: Mocks the endpoint to return each parametrized error status and forces a refresh.
+    Boundaries: Real adapter and cache dir; the HTTP response is faked with respx.
+    On failure, first check: status-code handling for 401/403/429/500 raising CatalogFetchError.
+    """
+    respx.get("https://openrouter.ai/api/v1/models").mock(return_value=httpx.Response(status_code, json={}))
 
     adapter = OpenRouterCatalogAdapter(cache_dir=tmp_path)
     with pytest.raises(CatalogFetchError):
@@ -64,10 +80,14 @@ async def test_openrouter_http_errors(tmp_path: Path, status_code: int) -> None:
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_malformed_json(tmp_path: Path) -> None:
-    respx.get("https://openrouter.ai/api/v1/models").mock(
-        return_value=httpx.Response(200, text="not-json")
-    )
+async def test_openrouter_malformed_json(tmp_path: Path):
+    """[Local] non-JSON body: an unparseable response raises CatalogParseError.
+
+    Scenario: Mocks the endpoint to return a 200 with a non-JSON body and forces a refresh.
+    Boundaries: Real adapter and cache dir; the HTTP response is faked with respx.
+    On failure, first check: JSON decoding guard translating into CatalogParseError.
+    """
+    respx.get("https://openrouter.ai/api/v1/models").mock(return_value=httpx.Response(200, text="not-json"))
 
     adapter = OpenRouterCatalogAdapter(cache_dir=tmp_path)
     with pytest.raises(CatalogParseError):
@@ -77,10 +97,14 @@ async def test_openrouter_malformed_json(tmp_path: Path) -> None:
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_top_level_malformed_schema(tmp_path: Path) -> None:
-    respx.get("https://openrouter.ai/api/v1/models").mock(
-        return_value=httpx.Response(200, json={"models": []})
-    )
+async def test_openrouter_top_level_malformed_schema(tmp_path: Path):
+    """[Local] wrong top-level shape: a payload missing 'data' raises CatalogParseError.
+
+    Scenario: Mocks the endpoint to return a JSON object without the expected data key.
+    Boundaries: Real adapter and cache dir; the HTTP response is faked with respx.
+    On failure, first check: top-level schema validation translating into CatalogParseError.
+    """
+    respx.get("https://openrouter.ai/api/v1/models").mock(return_value=httpx.Response(200, json={"models": []}))
 
     adapter = OpenRouterCatalogAdapter(cache_dir=tmp_path)
     with pytest.raises(CatalogParseError):
@@ -90,7 +114,13 @@ async def test_openrouter_top_level_malformed_schema(tmp_path: Path) -> None:
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_skips_one_malformed_model_entry(tmp_path: Path) -> None:
+async def test_openrouter_skips_one_malformed_model_entry(tmp_path: Path):
+    """[Local] partial payload: one bad entry is skipped and recorded as a parse warning.
+
+    Scenario: Mocks a payload with one valid and one malformed model entry and refreshes.
+    Boundaries: Real adapter and cache dir; the HTTP response is faked with respx.
+    On failure, first check: per-entry resilience keeping valid models and emitting parse warnings.
+    """
     respx.get("https://openrouter.ai/api/v1/models").mock(
         return_value=httpx.Response(
             200,
@@ -108,10 +138,14 @@ async def test_openrouter_skips_one_malformed_model_entry(tmp_path: Path) -> Non
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_authorization_header_optional(tmp_path: Path) -> None:
-    route = respx.get("https://openrouter.ai/api/v1/models").mock(
-        return_value=httpx.Response(200, json={"data": []})
-    )
+async def test_openrouter_authorization_header_optional(tmp_path: Path):
+    """[Local] optional auth header: the bearer header is sent only when an api key is set.
+
+    Scenario: Refreshes once without an api key and once with one, inspecting the request headers.
+    Boundaries: Real adapter and cache dir; the HTTP call is captured via respx.
+    On failure, first check: conditional Authorization header construction from the api key.
+    """
+    route = respx.get("https://openrouter.ai/api/v1/models").mock(return_value=httpx.Response(200, json={"data": []}))
 
     adapter_without_key = OpenRouterCatalogAdapter(cache_dir=tmp_path)
     await adapter_without_key.refresh(force=True)
@@ -125,10 +159,14 @@ async def test_openrouter_authorization_header_optional(tmp_path: Path) -> None:
 @pytest.mark.mock
 @pytest.mark.asyncio
 @respx.mock
-async def test_openrouter_errors_do_not_leak_api_key(tmp_path: Path) -> None:
-    respx.get("https://openrouter.ai/api/v1/models").mock(
-        side_effect=httpx.ConnectError("network down")
-    )
+async def test_openrouter_errors_do_not_leak_api_key(tmp_path: Path):
+    """[Local] no key leakage: a network error message never contains the api key.
+
+    Scenario: Mocks a connect error on refresh with an api key set and inspects the raised error.
+    Boundaries: Real adapter and cache dir; the HTTP transport is faked with respx.
+    On failure, first check: error message construction accidentally embedding the api key.
+    """
+    respx.get("https://openrouter.ai/api/v1/models").mock(side_effect=httpx.ConnectError("network down"))
 
     adapter = OpenRouterCatalogAdapter(cache_dir=tmp_path, api_key="very-secret")
     with pytest.raises(CatalogFetchError) as exc_info:

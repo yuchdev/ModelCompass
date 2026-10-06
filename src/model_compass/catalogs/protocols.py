@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol
+from typing import Optional, Protocol
 
 from model_compass.domain import CatalogSnapshot
 
@@ -16,6 +16,6 @@ class CatalogProvider(Protocol):
         *,
         force: bool = False,
         offline: bool = False,
-        now_utc: datetime | None = None,
+        now_utc: Optional[datetime] = None,
     ) -> CatalogSnapshot:
         """Refresh and return a catalog snapshot."""

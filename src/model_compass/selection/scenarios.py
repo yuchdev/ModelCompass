@@ -1,5 +1,7 @@
 """Reusable synthetic workload scenarios for comparisons and examples."""
 
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 from model_compass.domain import RequestProfile
@@ -54,7 +56,7 @@ def custom_workload_scenario(
     input_tokens: int,
     output_tokens: int,
     requires_tools: bool = False,
-    minimum_context: int | None = None,
+    minimum_context: Optional[int] = None,
 ) -> WorkloadScenario:
     """Create a user-defined synthetic scenario."""
     profile = RequestProfile(
@@ -62,14 +64,11 @@ def custom_workload_scenario(
         input_modalities=frozenset({"text"}),
         explicit_input_tokens=input_tokens,
         expected_output_tokens=output_tokens,
-        minimum_context=(
-            minimum_context if minimum_context is not None else input_tokens + output_tokens
-        ),
+        minimum_context=(minimum_context if minimum_context is not None else input_tokens + output_tokens),
         requires_tools=requires_tools,
     )
     return WorkloadScenario(
         name=name,
         profile=profile,
-        description=f"User-defined synthetic scenario: {input_tokens} input and "
-        f"{output_tokens} output tokens.",
+        description=f"User-defined synthetic scenario: {input_tokens} input and {output_tokens} output tokens.",
     )

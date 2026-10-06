@@ -13,17 +13,15 @@ from model_compass.exceptions import DependencyError
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_litellm_adapter_missing_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delitem(sys.modules, "litellm", raising=False)
+async def test_litellm_adapter_missing_dependency(monkeypatch: pytest.MonkeyPatch):
+    """[Unit] missing LiteLLM: verifies refresh raises DependencyError when LiteLLM can't be imported.
 
-    original_import = __import__("builtins").__import__
-
-    def _import(name: str, *args: object, **kwargs: object) -> object:
-        if name == "litellm":
-            raise ImportError("missing")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(__import__("builtins"), "__import__", _import)
+    Scenario: Set sys.modules["litellm"] = None, the documented way to force
+        ModuleNotFoundError on import, then call LiteLLMCatalogAdapter.refresh.
+    Boundaries: Only sys.modules is faked; the adapter's own logic runs for real.
+    On failure, first check: LiteLLMCatalogAdapter.refresh's ImportError handling.
+    """
+    monkeypatch.setitem(sys.modules, "litellm", None)
 
     adapter = LiteLLMCatalogAdapter()
     with pytest.raises(DependencyError):
@@ -32,7 +30,14 @@ async def test_litellm_adapter_missing_dependency(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_litellm_adapter_normalization(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_litellm_adapter_normalization(monkeypatch: pytest.MonkeyPatch):
+    """[Unit] model normalization: verifies model_cost entries are normalized into canonical profiles.
+
+    Scenario: Inject a fake litellm module with an openrouter-prefixed, a bare, and an
+        anthropic-prefixed model_cost entry, then refresh the adapter.
+    Boundaries: litellm itself is a fake module in sys.modules; normalization logic runs for real.
+    On failure, first check: LiteLLMCatalogAdapter.refresh's provider/model_id normalization.
+    """
     fake = types.SimpleNamespace(
         model_cost={
             "openrouter/openai/gpt-4o-mini": {
