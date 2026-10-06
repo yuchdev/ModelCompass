@@ -2,6 +2,7 @@ site_name: Model Compass
 site_description: Request-aware LLM model analytics, comparison, and selection
 site_url: https://yuchdev.github.io/ModelCompass
 repo_url: https://github.com/yuchdev/ModelCompass
+site_dir: .site
 
 theme:
   name: material

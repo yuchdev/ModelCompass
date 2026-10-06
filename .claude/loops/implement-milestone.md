@@ -195,7 +195,7 @@ budget allows, else reschedule.
 3. `uv run mypy src tests` (strict mode, tests included)
 4. `uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90`. This is the full non-live regression with a **90% branch-coverage floor**, run on Python 3.11, 3.12, and 3.13 in CI.
 5. `uv run mkdocs build --strict` (docs build; public-behavior changes must update `docs/`)
-6. `uv build`
+6. `uv build --out-dir .dist`
 
 The project also adds these gates:
 
@@ -348,7 +348,7 @@ pass its own gates.
   - `pytest -m "not live"` covers unit, mock, and integration markers and must keep branch coverage at **≥90%**;
   - `mypy` strict passes over `src` and `tests`;
   - `mkdocs build --strict` passes;
-  - `uv build` passes.
+  - `uv build --out-dir .dist` passes.
 - On top of those, the story needs `/pr-review` LGTM, tests for every non-trivial code path, and updated `docs/` when public behavior changes.
 - **Milestone complete** is the same set of gates run once more over the whole tree at M5. No staging deployment exists or is required, and live tests never gate completion.
 

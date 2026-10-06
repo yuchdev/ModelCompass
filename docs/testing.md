@@ -6,7 +6,7 @@ uv run ruff check .
 uv run mypy src tests
 uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90
 uv run mkdocs build --strict
-uv build
+uv build --out-dir .dist
 ```
 
 Unit tests cover domain/selection behavior without network calls. Mock tests

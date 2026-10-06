@@ -223,3 +223,5 @@ __marimo__/
 # Build outputs / local artifacts
 dist/
 site/
+.dist/
+.site/
