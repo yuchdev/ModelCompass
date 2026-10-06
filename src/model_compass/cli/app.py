@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import platform
+import sqlite3
 import sys
 import traceback
 from collections.abc import Iterable, Mapping
@@ -114,12 +115,13 @@ def version():
 
 @app.command()
 def doctor(
+    ctx: typer.Context,
     output_format: Annotated[OutputFormat, typer.Option("--format", help="Output format: table or json")] = (
         OutputFormat.table
     ),
 ):
     """Report environment health and default paths."""
-    paths = default_paths()
+    paths = _effective_paths(ctx)
     try:
         importlib.import_module("litellm")
         litellm_ok = True
@@ -136,6 +138,7 @@ def doctor(
         "litellm_available": litellm_ok,
         "litellm_error": litellm_error,
         "paths": _path_data(paths),
+        "database_path": str(_db_path(ctx)),
     }
     if output_format == OutputFormat.json:
         _print_json(payload)
@@ -149,6 +152,7 @@ def doctor(
     table.add_row("LiteLLM available", "yes" if litellm_ok else f"no: {litellm_error}")
     for name, value in _path_data(paths).items():
         table.add_row(name.replace("_", " ").title(), value)
+    table.add_row("Database", str(_db_path(ctx)))
     console.print(table)
 
 
@@ -1025,7 +1029,7 @@ def db_vacuum(ctx: typer.Context):
     """Reclaim unused space in the configured SQLite database."""
     try:
         _store(ctx).vacuum()
-    except ModelCompassError as exc:
+    except (ModelCompassError, sqlite3.Error) as exc:
         _fail(ctx, f"Unable to vacuum database: {exc}", 6)
     console.print("Database vacuum complete")
 
@@ -1049,6 +1053,8 @@ def run(
                 CompletionRequest(model_id=model_id, task=task, messages=[{"role": "user", "content": prompt}])
             )
         )
+    except StorageError as exc:
+        _fail(ctx, f"Unable to record execution observation: {exc}", 6)
     except ModelCompassError as exc:
         _fail(ctx, f"Execution failed: {exc}", 5)
     print(result.output_text)

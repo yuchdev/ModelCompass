@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import sqlite3
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -273,3 +274,44 @@ def test_config_never_prints_credential_values_and_live_benchmark_requires_ackno
     )
     assert result.exit_code == 2
     assert "acknowledge-live" in result.output
+
+
+@pytest.mark.unit
+def test_doctor_uses_path_overrides_and_vacuum_maps_sqlite_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """[Unit] Report configured paths and normalize SQLite vacuum failures.
+
+    Scenario: Pass path overrides to doctor and simulate a locked database during vacuum.
+    Boundaries: No provider requests; SQLite failure is raised by a patched store method.
+    On failure, first check: root path propagation and storage exit-code mapping.
+    """
+    data_dir = tmp_path / "data"
+    cache_dir = tmp_path / "cache"
+    database = tmp_path / "observations.sqlite3"
+    doctor = runner.invoke(
+        app,
+        [
+            "--data-dir",
+            str(data_dir),
+            "--cache-dir",
+            str(cache_dir),
+            "--db",
+            str(database),
+            "doctor",
+            "--format",
+            "json",
+        ],
+    )
+    assert doctor.exit_code == 0
+    doctor_payload = json.loads(doctor.output)
+    assert doctor_payload["paths"]["data_dir"] == str(data_dir)
+    assert doctor_payload["paths"]["cache_dir"] == str(cache_dir)
+    assert doctor_payload["database_path"] == str(database)
+
+    def fail_vacuum(self: SQLiteObservationStore):
+        """Raise the same SQLite error emitted for a locked database."""
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(SQLiteObservationStore, "vacuum", fail_vacuum)
+    vacuum = runner.invoke(app, ["--db", str(database), "db", "vacuum"])
+    assert vacuum.exit_code == 6
+    assert "database is locked" in vacuum.output
