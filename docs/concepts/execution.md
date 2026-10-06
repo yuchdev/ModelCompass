@@ -112,6 +112,8 @@ result.reconciliation   # CostReconciliation vs. the selector's expected cost
 The selected model replaces `execution_request.model_id`. If no model is eligible,
 `NoEligibleModelError` is raised before anything executes. On an execution failure the
 failure is recorded and re-raised with `observation_id` set on the exception.
+The request profile's task (or `general` when omitted) must match
+`execution_request.task`; mismatches are rejected before selection.
 
 ## Retries and fallbacks
 

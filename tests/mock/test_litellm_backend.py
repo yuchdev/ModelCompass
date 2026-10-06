@@ -655,12 +655,14 @@ async def test_stream_error_before_output_and_connect_failure_are_classified():
     Boundaries: Real LiteLLMBackend; the LiteLLM stream is an injected double, no network.
     On failure, first check: LiteLLMBackend._execute_stream error branch and classify_exception.
     """
-    with pytest.raises(ExecutionRateLimitError):
+    with pytest.raises(ExecutionRateLimitError) as raised:
         await LiteLLMBackend(
             completion_call=Recorder(
-                _Stream([], error=litellm.RateLimitError(message="x", llm_provider="p", model="m"))
+                _Stream([], error=litellm.RateLimitError(message=SECRET, llm_provider="p", model="m"))
             )
         ).execute(_request(stream=True))
+    assert raised.value.__cause__ is None
+    assert SECRET not in "".join(traceback.format_exception(raised.value))
     with pytest.raises(ExecutionTimeoutError):
         await LiteLLMBackend(completion_call=Recorder(TimeoutError("x"))).execute(_request(stream=True))
 
