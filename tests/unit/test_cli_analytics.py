@@ -73,7 +73,7 @@ def test_models_json_lists_decimal_pricing_without_rich_markup(
     result = runner.invoke(app, ["models", "--format", "json", "--offline"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload["schema_version"] == "1"
+    assert payload["schema_version"] == 1
     assert payload["models"][0]["pricing"]["prompt"] == "0.000001"
     assert "\x1b[" not in result.output
 
@@ -106,7 +106,7 @@ def test_select_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch):
         SimpleNamespace(catalog=SimpleNamespace(refresh=fail)),
     )
     failed = runner.invoke(app, ["select"])
-    assert failed.exit_code == 1
+    assert failed.exit_code == 4
     assert "Unable to select a model" in failed.output
 
 
@@ -132,7 +132,7 @@ def test_models_table_and_catalog_error(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(cli_app_module, "analytics", SimpleNamespace(catalog=SimpleNamespace(refresh=fail)))
     failed = runner.invoke(app, ["models"])
-    assert failed.exit_code == 1
+    assert failed.exit_code == 4
     assert "Unable to load catalog: catalog unavailable" in failed.output
 
 
@@ -182,7 +182,7 @@ def test_select_json_returns_explanation_and_policy(monkeypatch: pytest.MonkeyPa
     payload = json.loads(result.output)
     assert payload["policy"] == "cheapest"
     assert payload["selected"]["model_id"] == "test:small"
-    assert payload["schema_version"] == "1"
+    assert payload["schema_version"] == 1
 
 
 @pytest.mark.unit
@@ -217,7 +217,7 @@ def test_observations_cli_json(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(cli_app_module, "analytics", SimpleNamespace(list_observations=fail))
     failed = runner.invoke(app, ["observations"])
-    assert failed.exit_code == 1
+    assert failed.exit_code == 6
     assert "Unable to read observations" in failed.output
 
 
@@ -287,7 +287,7 @@ def test_estimate_table_and_missing_model(monkeypatch: pytest.MonkeyPatch):
             "1",
         ],
     )
-    assert missing.exit_code == 1
+    assert missing.exit_code == 2
     assert "was not found" in missing.output
 
 
@@ -313,7 +313,7 @@ def test_pareto_cli_json_reports_objectives(monkeypatch: pytest.MonkeyPatch):
     result = runner.invoke(app, ["pareto", "--objectives", "quality,cost", "--format", "json"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload["objectives"] == ["quality", "cost"]
+    assert payload["objectives"] == ["quality:max", "cost:min"]
     assert payload["models"][0]["model_id"] == "test:small"
 
 
@@ -340,7 +340,7 @@ def test_pareto_table_and_invalid_objective(monkeypatch: pytest.MonkeyPatch):
     assert table.exit_code == 0
     assert "Pareto frontier" in table.output
     invalid = runner.invoke(app, ["pareto", "--objectives", "mystery"])
-    assert invalid.exit_code == 1
+    assert invalid.exit_code == 2
     assert "Unable to calculate Pareto frontier" in invalid.output
 
 
@@ -475,7 +475,7 @@ def test_benchmark_cli_rejects_invalid_output_file(tmp_path: Path):
             "test:small",
         ],
     )
-    assert result.exit_code == 1
+    assert result.exit_code == 5
     assert "outputs file must contain" in result.output
 
 
@@ -505,7 +505,7 @@ def test_run_cli_reads_prompt_from_stdin_without_rich_markup(
             )
 
     monkeypatch.setattr(cli_app_module, "analytics", FakeAnalytics())
-    result = runner.invoke(app, ["run", "--model", "test:model"], input="private prompt")
+    result = runner.invoke(app, ["run", "--model", "test:model", "--stdin"], input="private prompt")
     assert result.exit_code == 0
     assert result.output == "[bold]literal output[/bold]\n"
 
@@ -520,7 +520,7 @@ def test_run_cli_handles_missing_prompt_and_execution_error(
     Boundaries: Drives the real CLI through Typer's CliRunner; catalog, store, and backend collaborators are faked in-process.
     On failure, first check: the failing assertion and the value it compares against.
     """
-    no_prompt = runner.invoke(app, ["run", "--model", "test:model"])
+    no_prompt = runner.invoke(app, ["run", "--model", "test:model", "--stdin"])
     assert no_prompt.exit_code == 2
     assert "Provide a prompt on stdin" in no_prompt.output
 
@@ -533,8 +533,8 @@ def test_run_cli_handles_missing_prompt_and_execution_error(
             raise ModelCompassError("provider unavailable")
 
     monkeypatch.setattr(cli_app_module, "analytics", FailingAnalytics())
-    failed = runner.invoke(app, ["run", "--model", "test:model"], input="prompt")
-    assert failed.exit_code == 1
+    failed = runner.invoke(app, ["run", "--model", "test:model", "--stdin"], input="prompt")
+    assert failed.exit_code == 5
     assert "Execution failed" in failed.output
 
 
@@ -548,7 +548,7 @@ def test_select_invalid_decimal_returns_actionable_error(monkeypatch: pytest.Mon
     """
     monkeypatch.setattr(cli_app_module, "analytics", SimpleNamespace())
     result = runner.invoke(app, ["select", "--max-cost", "not-money"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "--max-cost must be a decimal number" in result.output
 
 
@@ -600,5 +600,5 @@ def test_select_accepts_modality_and_context_options(monkeypatch: pytest.MonkeyP
         app,
         ["select", "--format", "json", "--input-modality", "image", "--minimum-context", "5000"],
     )
-    assert rejected.exit_code == 0
+    assert rejected.exit_code == 3
     assert json.loads(rejected.output)["selected"] is None

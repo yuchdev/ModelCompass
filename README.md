@@ -76,35 +76,31 @@ uv build --out-dir .dist
 ## CLI
 
 ```bash
-# Show help and available commands
+# Show help, list models, and inspect model details
 model-compass --help
+model-compass models list --modality text --limit 20
+model-compass models show openrouter:openai/gpt-4o-mini
 
-# List models and estimate token costs (requires a cached catalog for --offline)
-model-compass models
+# Estimate request cost
 model-compass estimate --model openrouter:openai/gpt-4o-mini \
-  --input-tokens 1000 --output-tokens 500 --format json
+  --input-tokens 1000 --expected-output-tokens 500 --format json
 
-# Select with explicit workload constraints
+# Compare or select models without executing them
+model-compass compare --task code_review --input-tokens 40000 --sort cheapest
 model-compass select --task code_review --input-tokens 40000 \
-  --output-tokens 2000 --requires-tools --max-cost 0.05 --policy cheapest
+  --expected-output-tokens 2000 --require-tools --max-cost 0.05 --objective cheapest
 
-# Execute a prompt read from stdin; only aggregate usage is stored
-printf 'Summarize this text' | model-compass run --model openai/gpt-4o-mini
+# Run live benchmarks only with an explicit acknowledgement
+model-compass benchmark run --dataset dataset.jsonl --model openai/gpt-4o-mini \
+  --max-cost 1.00 --acknowledge-live
 
-# Inspect recorded outcomes
-model-compass observations --format json
-
-# Show version
-model-compass version
-
-# Environment health check
-model-compass doctor
-model-compass doctor --format json
+# Inspect local observations
+model-compass observations stats --task summarization --format json
 ```
 
-The catalog-backed commands use OpenRouter's public model list; use `--offline`
-to require a previously cached snapshot. The execution command delegates model
-calls to LiteLLM and reads provider credentials from environment variables.
+Catalog-backed commands use OpenRouter's public model list; use `--offline` to
+require a previously cached snapshot. See the [CLI guide](docs/cli.md) for
+command groups, global path overrides, JSON output, and exit codes.
 
 ## Configuration
 
