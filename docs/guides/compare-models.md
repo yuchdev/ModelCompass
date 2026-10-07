@@ -5,7 +5,8 @@
 ```python
 from decimal import Decimal
 
-from model_compass import FallbackTokenEstimator, RequestProfile
+from model_compass import RequestProfile
+from model_compass.metrics import FallbackTokenEstimator
 from model_compass.selection import compare_models
 
 request = RequestProfile(task='code_review', explicit_input_tokens=12_000, expected_output_tokens=1_000)

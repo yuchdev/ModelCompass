@@ -9,7 +9,7 @@ uv run pytest -m integration
 uv run pytest -m "not live"
 ```
 
-The mandatory CI command is the `not live` suite with coverage:
+The mandatory test-suite command is the `not live` suite with coverage:
 
 ```bash
 uv run pytest -m "not live" --cov=model_compass --cov-branch --cov-fail-under=90

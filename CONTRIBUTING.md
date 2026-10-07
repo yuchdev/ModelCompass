@@ -62,7 +62,12 @@ Every public feature addition should come with docs, examples, or both. If a use
 
 ## Release process
 
-Release work is coordinated through the changelog and the existing release tooling (`release-saga`). See `CHANGELOG.md` and the repository automation for the current release steps.
+No automated release workflow is configured. Maintainers should:
+
+1. Bump the version in `pyproject.toml` and move the completed `Unreleased` entries in `CHANGELOG.md` to a dated version heading.
+2. Run the quality gates above and build the distributions with `uv build --out-dir .dist`.
+3. Create and push a `vX.Y.Z` tag, then create the matching GitHub release using the changelog entry as its notes.
+4. Publish the built distributions to the project's package index, if a package release is intended.
 
 ## Security
 
