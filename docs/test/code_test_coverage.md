@@ -143,7 +143,8 @@ Coverage settings are in `pyproject.toml` and `.coveragerc`
        """Test basic functionality."""
        result = module.feature(input_data)
        assert result == expected_output
-   
+
+
    def test_feature_edge_case():
        """Test edge cases."""
        # ...
@@ -193,10 +194,8 @@ Make sure you test:
 
 - ✅ **Type variations**: Different input types
   ```python
-  def test_with_string():
-      ...
-  def test_with_int():
-      ...
+  def test_with_string(): ...
+  def test_with_int(): ...
   ```
 
 ## When Coverage Drops

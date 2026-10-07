@@ -69,8 +69,8 @@ def test_discount_tier_below_threshold_is_none():
 ### Bad (why)
 
 ```python
-def test_stuff():                      # non-descriptive name
-    """Tests the score thing."""       # no [Class] tag, no 'verifies', no stanzas
+def test_stuff():  # non-descriptive name
+    """Tests the score thing."""  # no [Class] tag, no 'verifies', no stanzas
 ```
 
 The bad one fails the title regex, carries no classification, and gives an

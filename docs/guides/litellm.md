@@ -9,9 +9,7 @@ the response. See [Execution](../concepts/execution.md) for the data model.
 from model_compass.execution import ExecutionRequest, LiteLLMBackend
 
 backend = LiteLLMBackend()  # reads provider keys from the environment, as LiteLLM does
-request = ExecutionRequest.from_prompt(
-    "openai/gpt-4o-mini", "qa", "What is 2+2?", parameters={"max_tokens": 16}
-)
+request = ExecutionRequest.from_prompt("openai/gpt-4o-mini", "qa", "What is 2+2?", parameters={"max_tokens": 16})
 result = await backend.execute(request)
 print(result.output_text, result.usage, result.actual_cost_usd)
 ```
@@ -91,8 +89,11 @@ Mandatory tests mock LiteLLM at the `completion_call` boundary and need no crede
 
 ```python
 async def fake_completion(**kwargs):
-    return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 3, "completion_tokens": 1}}
+    return {
+        "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 1},
+    }
+
 
 backend = LiteLLMBackend(completion_call=fake_completion)
 ```

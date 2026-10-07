@@ -18,7 +18,7 @@ Selection and comparison can be run entirely offline when you already have model
 ```python
 from model_compass import RequestProfile, SelectionPolicy, analytics
 
-request = RequestProfile(task='qa', explicit_input_tokens=1_000, expected_output_tokens=200)
+request = RequestProfile(task="qa", explicit_input_tokens=1_000, expected_output_tokens=200)
 result = analytics.select(profiles, request, policy=SelectionPolicy.CHEAPEST)
 ```
 
