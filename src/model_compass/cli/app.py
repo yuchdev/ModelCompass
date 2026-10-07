@@ -33,7 +33,7 @@ from model_compass.benchmarks import (
 )
 from model_compass.catalogs import CatalogService, LiteLLMCatalogAdapter, OpenRouterCatalogAdapter
 from model_compass.config import AppPaths, default_paths
-from model_compass.domain import CatalogSnapshot, ModelProfile, RequestProfile
+from model_compass.domain import BenchmarkResult, CatalogSnapshot, ModelProfile, RequestProfile
 from model_compass.exceptions import ModelCompassError, NoEligibleModelError, StorageError
 from model_compass.execution import CompletionRequest, LiteLLMBackend
 from model_compass.metrics import FallbackTokenEstimator, summarize_observations
@@ -557,16 +557,27 @@ def compare(
         )
         snapshot, _ = _refresh_catalog(ctx, source="all", offline=offline)
         profiles = _model_inclusion(snapshot.models.values(), include_model, exclude_model)
+        store = _store(ctx)
         report = compare_models(
             profiles,
             request,
             FallbackTokenEstimator(),
             prompt=prompt,
+            observations=store.list(task=task),
+            quality_evidence=store.list_quality_evidence(task=task),
             selected_policy=policy,
         )
+    except StorageError as exc:
+        _fail(ctx, f"Unable to compare models: {exc}", 6)
     except (ModelCompassError, ValueError) as exc:
         _fail(ctx, f"Unable to compare models: {exc}", 4 if isinstance(exc, ModelCompassError) else 2)
     candidates = list(report.candidates)
+    candidates.sort(
+        key=lambda candidate: (
+            candidate.rank_by_policy.get(policy.value, sys.maxsize),
+            candidate.model.identity.canonical_id,
+        )
+    )
     if limit is not None:
         candidates = candidates[:limit]
     payload = {
@@ -722,7 +733,7 @@ def pareto(
     members = analysis.frontier
     if include_dominated:
         by_id = {item.model_id: item for item in result.assessments}
-        members = tuple(by_id[key] for key in sorted(by_id))
+        members = tuple(by_id[key] for key in sorted(by_id) if by_id[key].eligible)
     payload = {
         "schema_version": 1,
         "command": "pareto",
@@ -869,6 +880,10 @@ def benchmark_run(
     if not acknowledge_live:
         _fail(ctx, "Live benchmark not started.", 2, hint="Pass --acknowledge-live to permit billable model requests.")
     try:
+        max_cost = _parse_decimal_option(max_cost, "--max-cost")
+    except ValueError as exc:
+        _fail(ctx, f"Benchmark failed: {exc}", 2)
+    try:
         content = dataset.read_text(encoding="utf-8")
         dataset_model = load_dataset_jsonl(content)
         if evaluator:
@@ -877,7 +892,7 @@ def benchmark_run(
                     "cases": tuple(case.model_copy(update={"evaluator": evaluator}) for case in dataset_model.cases)
                 }
             )
-        budget = RunnerBudget(max_total_cost=_parse_decimal_option(max_cost, "--max-cost")) if max_cost else None
+        budget = RunnerBudget(max_total_cost=max_cost) if max_cost is not None else None
         outcome = asyncio.run(
             run_benchmark(
                 dataset_model,
@@ -886,14 +901,15 @@ def benchmark_run(
                 config=BenchmarkRunConfig(repetitions=repetitions, concurrency=concurrency, budget=budget),
             )
         )
-        store = _store(ctx)
-        store.record_benchmark_run(outcome.run)
-        for result in outcome.results:
-            store.record_benchmark_result(result)
-    except StorageError as exc:
-        _fail(ctx, f"Unable to persist benchmark results: {exc}", 6)
     except (ModelCompassError, OSError, ValueError) as exc:
         _fail(ctx, f"Benchmark failed: {exc}", 5)
+    try:
+        store = _store(ctx)
+        store.record_benchmark_run(outcome.run)
+        for result in _aggregate_benchmark_results(outcome.results):
+            store.record_benchmark_result(result)
+    except (StorageError, sqlite3.Error) as exc:
+        _fail(ctx, f"Unable to persist benchmark results: {exc}", 6)
     payload = {
         "schema_version": 1,
         "command": "benchmark run",
@@ -1450,6 +1466,47 @@ def _parse_decimal_option(value: Optional[str], option_name: str) -> Optional[De
     if not result.is_finite():
         raise ValueError(f"{option_name} must be a finite decimal number")
     return result
+
+
+def _aggregate_benchmark_results(results: Iterable[BenchmarkResult]) -> tuple[BenchmarkResult, ...]:
+    """Aggregate repeated case/model results while retaining each repetition in metadata."""
+    grouped: dict[tuple[str, str, str], list[BenchmarkResult]] = {}
+    for result in results:
+        grouped.setdefault((result.run_id, result.case_id, result.model_id), []).append(result)
+
+    aggregated: list[BenchmarkResult] = []
+    for identity in sorted(grouped):
+        repetitions = sorted(
+            grouped[identity],
+            key=lambda item: (item.metadata.get("repetition", sys.maxsize), item.model_dump_json()),
+        )
+        if len(repetitions) == 1:
+            aggregated.append(repetitions[0])
+            continue
+
+        first = repetitions[0]
+        metadata = {
+            **first.metadata,
+            "repetition_count": len(repetitions),
+            "repetitions": [item.model_dump(mode="json") for item in repetitions],
+        }
+        aggregated.append(
+            first.model_copy(
+                update={
+                    "score": _mean_decimal(item.score for item in repetitions),
+                    "cost": _mean_decimal(item.cost for item in repetitions),
+                    "latency_ms": _mean_decimal(item.latency_ms for item in repetitions),
+                    "metadata": metadata,
+                }
+            )
+        )
+    return tuple(aggregated)
+
+
+def _mean_decimal(values: Iterable[Optional[Decimal]]) -> Optional[Decimal]:
+    """Return the Decimal mean of present values, or None when no values are present."""
+    present = [value for value in values if value is not None]
+    return sum(present, Decimal(0)) / Decimal(len(present)) if present else None
 
 
 def _parse_datetime(value: str) -> datetime:

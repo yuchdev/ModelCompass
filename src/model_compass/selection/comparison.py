@@ -154,9 +154,16 @@ def compare_models(
         cost = cost_estimates[model.identity.canonical_id]
         eligibility = check_eligibility(
             model,
-            request,
+            request.model_copy(update={"min_quality": None, "max_latency_ms": None, "min_reliability": None}),
             missing_data_policy=missing_data_policy,
         )
+        assessment = assessments.get(model.identity.canonical_id)
+        if assessment is not None and not assessment.eligible:
+            eligibility = EligibilityResult(
+                eligible=False,
+                reasons=tuple(dict.fromkeys((*eligibility.reasons, *assessment.reasons))),
+                unknown_requirements=eligibility.unknown_requirements,
+            )
         if request.max_cost_usd is not None:
             reasons = list(eligibility.reasons)
             unknown = list(eligibility.unknown_requirements)

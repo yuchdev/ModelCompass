@@ -111,6 +111,9 @@ model-compass benchmark show RUN_ID
 model-compass benchmark export --run-id RUN_ID --output run.json
 ```
 
+Repeated live results are persisted as one case/model average for each available
+numeric measurement; its metadata retains the individual repetition results.
+
 The backward-compatible bare form `benchmark --dataset FILE --outputs FILE
 --model MODEL` evaluates saved outputs offline. Pass `--record` to store its
 quality evidence.
