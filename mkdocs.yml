@@ -3,6 +3,7 @@ site_description: Request-aware LLM model analytics, comparison, and selection
 site_url: https://yuchdev.github.io/ModelCompass
 repo_url: https://github.com/yuchdev/ModelCompass
 site_dir: .site
+exclude_docs: README.md
 
 theme:
   name: material
@@ -22,6 +23,7 @@ plugins:
 
 nav:
   - Home: index.md
+  - CLI: cli.md
   - Architecture:
       - Overview: architecture.md
       - Decision record: adr/architecture.md
