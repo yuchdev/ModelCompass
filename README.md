@@ -130,15 +130,13 @@ optional for offline analytics and catalog access.
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from model_compass import (
+from model_compass import RequestProfile, SelectionPolicy, analytics
+from model_compass.domain import (
     ModelCapabilities,
     ModelIdentity,
     ModelProfile,
     PriceComponent,
     Pricing,
-    RequestProfile,
-    SelectionPolicy,
-    analytics,
 )
 
 request = RequestProfile(
