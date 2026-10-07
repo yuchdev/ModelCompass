@@ -23,13 +23,13 @@ plugins:
 
 nav:
   - Home: index.md
+  - Configuration: configuration.md
   - CLI: cli.md
   - Architecture:
       - Overview: architecture.md
       - Decision record: adr/architecture.md
   - Concepts:
-      - Models and pricing: adr/lite-concepts-draft.md
-      - Models: concepts/models.md
+      - Models and pricing: concepts/models.md
       - Pricing: concepts/pricing.md
       - Request profiles: concepts/request-profile.md
       - Cost estimation: concepts/cost-estimation.md
@@ -39,16 +39,22 @@ nav:
       - Pareto analysis: concepts/pareto.md
       - Quality evidence: concepts/quality.md
   - Guides:
+      - Quickstart: guides/quickstart.md
       - Catalogs: guides/catalogs.md
+      - Compare models: guides/compare-models.md
+      - Select model: guides/select-model.md
       - Analytics and selection: guides/analytics.md
       - Selection policies: guides/selection-policies.md
       - Storage: guides/storage.md
+      - Offline use: guides/offline-use.md
       - Executing with LiteLLM: guides/litellm.md
       - Benchmarks: guides/benchmarks.md
       - Custom evaluators: guides/custom-evaluators.md
   - Testing:
       - Overview: testing.md
       - Taxonomy: qa/testing.md
+  - Reference:
+      - API: reference/api.md
 
 markdown_extensions:
   - pymdownx.highlight

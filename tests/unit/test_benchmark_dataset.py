@@ -215,3 +215,19 @@ def test_example_sample_dataset_loads_and_exercises_every_known_evaluator():
     dataset = load_dataset_jsonl(path.read_text(encoding="utf-8"))
     used_evaluators = {case.evaluator for case in dataset.cases}
     assert used_evaluators == KNOWN_EVALUATOR_IDS - {"llm_judge"}
+
+
+@pytest.mark.unit
+def test_example_sample_jsonl_matches_the_legacy_sample_dataset():
+    """[Unit] example dataset alias: the new sample.jsonl stays aligned with the legacy file.
+
+    Scenario: Loads both shipped benchmark example files and compares their identity and evaluator coverage.
+    Boundaries: Real load_dataset_jsonl against real repository files; no network.
+    On failure, first check: the two example files for accidental divergence.
+    """
+    legacy_path = _REPO_ROOT / "examples" / "benchmarks" / "sample-dataset.jsonl"
+    canonical_path = _REPO_ROOT / "examples" / "benchmarks" / "sample.jsonl"
+    legacy = load_dataset_jsonl(legacy_path.read_text(encoding="utf-8"))
+    canonical = load_dataset_jsonl(canonical_path.read_text(encoding="utf-8"))
+    assert canonical == legacy
+    assert canonical.content_hash == legacy.content_hash
