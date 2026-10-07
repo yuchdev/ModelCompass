@@ -1,32 +1,38 @@
 # Model Compass
 
-Model Compass is a Python library and CLI for request-aware LLM model catalog
-analysis, cost estimation, empirical metrics, model selection, and execution.
-It uses LiteLLM for normalized execution, while owning its request constraints,
-selection policies, explanations, and Pareto analysis.
+Model Compass is a Python library and CLI for request-aware LLM model analytics, comparison, and selection.
 
-## Quick start
+It helps you answer questions such as:
 
-Install the project and run the CLI:
+- which model is cheapest for a request;
+- whether a model is eligible before ranking;
+- how quality evidence was obtained;
+- what the estimated cost means;
+- how to run benchmarks and keep their evidence separate from execution observations.
 
-```bash
-uv sync --all-groups
-uv run model-compass --help
-```
+## Start here
 
-Read the [analytics guide](guides/analytics.md) for selecting a model from an
-explicit request profile. Catalog-backed commands may fetch OpenRouter's public
-catalog; pass `--offline` to use only a cached snapshot.
+- [Quickstart](guides/quickstart.md)
+- [Configuration](configuration.md)
+- [Selection model](concepts/selection.md)
+- [Benchmarks](guides/benchmarks.md)
+- [Testing](testing.md)
+- [API reference](reference/api.md)
+
+## What is included
+
+- OpenRouter and LiteLLM catalog ingestion
+- Decimal-based pricing and cost estimation
+- Capability matching and transparent selection policies
+- Pareto analysis for cost / quality / latency / reliability tradeoffs
+- Benchmark datasets, deterministic evaluators, and optional LLM judging
+- Prompt-free local execution observations
 
 ## Design principles
 
-- Prices and calculated costs use `decimal.Decimal`.
-- Unknown capability and evidence data is kept distinct from unsupported data.
-- Selection returns eligibility reasons and the evidence used.
-- Quality summaries only use evidence matching the requested task.
-- Prompt and message bodies are not written to the observation database.
-- Core selection and benchmark evaluation are deterministic and offline.
-
-See [Architecture](architecture.md), [Request profiles](concepts/request-profile.md),
-[Cost estimation](concepts/cost-estimation.md), [Pricing](concepts/pricing.md), and
-[Testing](testing.md) for details.
+- prices and calculated costs use `decimal.Decimal`
+- missing capability or evidence data stays explicit
+- selection returns reasons and evidence, not just a model id
+- quality evidence is task-specific
+- prompt and response bodies are not persisted unless you opt in
+- benchmark and execution data are stored separately

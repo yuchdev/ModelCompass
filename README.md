@@ -2,7 +2,11 @@
 
 > **Warning:** Model recommendations produced by this tool are evidence-based estimates, not guarantees. Always validate model choices for your specific workload.
 
-A production-quality Python library and CLI for **request-aware LLM model analytics, comparison, and selection**.
+Model Compass is a Python library and CLI for request-aware LLM model analytics: it ingests model catalogs, estimates request cost, compares candidates, applies transparent selection policies, runs reproducible benchmarks, and records prompt-free execution observations.
+
+## Why this project
+
+LLM model choice is usually explained with one number, one benchmark, or one provider's marketing page. Model Compass keeps the inputs separate so you can see prices, request requirements, quality evidence, latency, reliability, and the tradeoffs between them.
 
 ## What it does
 
@@ -29,6 +33,10 @@ Model Compass provides:
 - Exact-task empirical metrics and Pareto-frontier analysis
 - SQLite observation storage that excludes prompt and message bodies
 - LiteLLM execution and deterministic exact/regex/JSON benchmark evaluation
+
+## Status
+
+Alpha. The core API is stable enough for experimentation and internal tooling, but the project still expects careful validation for production use.
 
 ## Install from source
 
@@ -116,12 +124,22 @@ The initial implementation recognizes `OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
 and `ANTHROPIC_API_KEY` through the LiteLLM/provider integrations. They are
 optional for offline analytics and catalog access.
 
-## Library example
+## 60-second library example
 
 ```python
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from model_compass import RequestProfile, SelectionPolicy, analytics
+from model_compass import (
+    ModelCapabilities,
+    ModelIdentity,
+    ModelProfile,
+    PriceComponent,
+    Pricing,
+    RequestProfile,
+    SelectionPolicy,
+    analytics,
+)
 
 request = RequestProfile(
     task="summarization",
@@ -129,11 +147,78 @@ request = RequestProfile(
     expected_output_tokens=500,
     max_cost_usd=Decimal("0.02"),
 )
-snapshot = analytics.catalog.refresh(include_litellm=False)
-choice = analytics.select(list(snapshot.models.values()), request, policy=SelectionPolicy.CHEAPEST)
-if choice.selected is not None:
-    print(choice.selected.model_id, choice.selected.reasons)
+profiles = [
+    ModelProfile(
+        identity=ModelIdentity(provider="demo", model_id="small", canonical_id="demo:small"),
+        capabilities=ModelCapabilities(input_modalities=("text",), output_modalities=("text",)),
+        pricing=Pricing(components={
+            "prompt": PriceComponent(key="prompt", amount=Decimal("0.000001")),
+            "completion": PriceComponent(key="completion", amount=Decimal("0.000002")),
+        }),
+        retrieved_at=datetime.now(UTC),
+    ),
+    ModelProfile(
+        identity=ModelIdentity(provider="demo", model_id="large", canonical_id="demo:large"),
+        capabilities=ModelCapabilities(input_modalities=("text",), output_modalities=("text",)),
+        pricing=Pricing(components={
+            "prompt": PriceComponent(key="prompt", amount=Decimal("0.000003")),
+            "completion": PriceComponent(key="completion", amount=Decimal("0.000006")),
+        }),
+        retrieved_at=datetime.now(UTC),
+    ),
+]
+choice = analytics.select(profiles, request, policy=SelectionPolicy.CHEAPEST)
+print(choice.selected.model_id if choice.selected else "no selection")
 ```
 
-See the [analytics guide](https://yuchdev.github.io/ModelCompass/guides/analytics/)
-for request profiles, missing-data behavior, and observation examples.
+See the [quickstart guide](docs/guides/quickstart.md) for a fuller offline example.
+
+## Architecture diagram
+
+```text
+CLI / application facade
+          |
+          v
+request profile -> estimation -> selection / pareto -> explanations
+          |             |              |
+          v             v              v
+   catalogs        metrics / storage   execution
+OpenRouter         observations        LiteLLM backend
+and LiteLLM        and benchmarks      or another backend
+```
+
+## Model-selection philosophy
+
+Model Compass filters out hard violations first, then ranks only the surviving candidates. It keeps missing data visible instead of inventing certainty, and it treats cost, quality, reliability, and latency as separate concerns rather than collapsing them into one score.
+
+## Data/privacy note
+
+Execution observations intentionally omit prompt and response bodies by default. API keys are read from the environment and never stored by the library. Use the `PayloadPolicy.FULL` options only when you explicitly want to retain raw content.
+
+## Testing
+
+```bash
+uv run pytest -m unit
+uv run pytest -m mock
+uv run pytest -m integration
+uv run pytest -m "not live"
+```
+
+Live tests are opt-in and require the documented credentials or explicit acknowledgements in the test environment.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. Documentation changes are part of the product here, not an afterthought.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+## Docs
+
+- [Documentation home](docs/index.md)
+- [Architecture](docs/architecture.md)
+- [Configuration](docs/configuration.md)
+- [CLI](docs/cli.md)
+- [Testing](docs/testing.md)
+- [API reference](docs/reference/api.md)

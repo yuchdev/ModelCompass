@@ -49,8 +49,7 @@ can never drift from the cases it describes. `BenchmarkRun.dataset_hash`
 records this hash for every run, so you can tell whether a dataset changed
 between two runs even if its name and version string did not.
 
-See `examples/benchmarks/sample-dataset.jsonl` for a worked example covering
-every built-in evaluator.
+See `examples/benchmarks/sample.jsonl` for a worked example covering every built-in evaluator. The legacy `sample-dataset.jsonl` file remains in the tree for compatibility with older docs and tests.
 
 ## Running a benchmark
 
