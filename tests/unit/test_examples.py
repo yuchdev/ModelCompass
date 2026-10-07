@@ -24,7 +24,9 @@ def _run_example(script_name: str) -> dict[str, object]:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
-    return json.loads(completed.stdout)
+    parsed: object = json.loads(completed.stdout)
+    assert isinstance(parsed, dict)
+    return {str(key): value for key, value in parsed.items()}
 
 
 @pytest.mark.unit
