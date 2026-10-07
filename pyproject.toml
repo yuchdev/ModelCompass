@@ -40,6 +40,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/yuchdev/ModelCompass"
 Repository = "https://github.com/yuchdev/ModelCompass"
+Documentation = "https://yuchdev.github.io/ModelCompass"
 Issues = "https://github.com/yuchdev/ModelCompass/issues"
 
 [project.scripts]

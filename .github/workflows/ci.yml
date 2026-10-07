@@ -1,6 +1,6 @@
 name: CI
 
-on:
+"on":
   push:
     branches: [main]
   pull_request:
@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint and Format
+  ruff-format:
+    name: Ruff Format
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,6 +25,19 @@ jobs:
         run: uv sync --all-groups
       - name: Ruff format check
         run: uv run ruff format --check .
+
+  ruff-lint:
+    name: Ruff Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --all-groups
       - name: Ruff lint
         run: uv run ruff check .
 
@@ -43,8 +56,8 @@ jobs:
       - name: MyPy
         run: uv run mypy src tests
 
-  tests:
-    name: Tests (Python ${{ matrix.python-version }})
+  test-matrix:
+    name: Pytest Tests Matrix (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,6 +73,21 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups
       - name: Run tests
+        run: uv run pytest -m "not live"
+
+  coverage-gate:
+    name: Branch Coverage Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Run coverage gate
         run: |
           uv run pytest -m "not live" \
             --cov=model_compass \
@@ -67,8 +95,8 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=90
 
-  docs:
-    name: Docs Build
+  docs-build:
+    name: Docs Strict Build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,8 +110,8 @@ jobs:
       - name: Build docs
         run: uv run mkdocs build --strict
 
-  build:
-    name: Package Build
+  package-build:
+    name: Package Build (using release-saga)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,6 +121,42 @@ jobs:
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync
-      - name: Build package
-        run: uv build --out-dir .dist
+        run: uv sync --all-groups
+      - name: Build package using release-saga
+        run: |
+          uv run release-saga
+          uv build --out-dir dist
+      - name: Inspect build artifacts
+        run: uv run python scripts/smoke_install.py --dist-dir dist --skip-install
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+          retention-days: 1
+
+  smoke-install:
+    name: Wheel Smoke Install (using release-saga)
+    needs: package-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+      - name: Local install via release-saga
+        run: |
+          uv run release-saga --local-install
+      - name: Smoke test installed wheel in clean environment
+        run: |
+          uv run python scripts/smoke_install.py --dist-dir dist
+

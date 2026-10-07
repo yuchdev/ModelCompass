@@ -1,0 +1,78 @@
+name: Live Smoke Tests
+
+"on":
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Explicit low-cost LiteLLM model identifier"
+        required: true
+        default: "openrouter/google/gemini-2.0-flash-lite-001"
+        type: string
+      max_cost_usd:
+        description: "Budget guard ceiling in USD"
+        required: true
+        default: "0.01"
+        type: string
+      run_openrouter_catalog:
+        description: "Run live OpenRouter catalog snapshot test"
+        required: true
+        default: true
+        type: boolean
+      run_llm_execution:
+        description: "Run live LLM execution test"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    name: Live Smoke Tests
+    runs-on: ubuntu-latest
+    # Prevent automatic execution on forked PRs; manual dispatch only
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Validate budget guard input
+        run: |
+          python3 -c "
+          from decimal import Decimal, InvalidOperation
+          import sys
+          val = '${{ inputs.max_cost_usd }}'
+          try:
+              d = Decimal(val)
+              if d <= Decimal('0') or d > Decimal('0.50'):
+                  print(f'Budget ceiling {d} outside safe limit (0, 0.50]', file=sys.stderr)
+                  sys.exit(1)
+          except InvalidOperation:
+              print(f'Invalid budget number: {val}', file=sys.stderr)
+              sys.exit(1)
+          "
+      - name: Mask sensitive credentials
+        run: |
+          if [ -n "${{ secrets.OPENROUTER_API_KEY }}" ]; then
+            echo "::add-mask::${{ secrets.OPENROUTER_API_KEY }}"
+          fi
+      - name: Run live catalog test
+        if: ${{ inputs.run_openrouter_catalog }}
+        env:
+          MODEL_ANALYTICS_LIVE_OPENROUTER: "1"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          uv run pytest tests/live/test_openrouter_live_catalog.py -m live -v
+      - name: Run live execution test
+        if: ${{ inputs.run_llm_execution }}
+        env:
+          MODEL_ANALYTICS_LIVE_LLM: "1"
+          MODEL_ANALYTICS_LIVE_MODEL: ${{ inputs.model }}
+          MODEL_ANALYTICS_LIVE_MAX_COST_USD: ${{ inputs.max_cost_usd }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          uv run pytest tests/live/test_execution_live.py -m live -v
