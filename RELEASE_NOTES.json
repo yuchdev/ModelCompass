@@ -1,13 +1,20 @@
 {
   "release": {
     "download_link": "https://packages-s3-useast1-any.s3.dualstack.us-east-1.amazonaws.com/{package_name_dash}/{package_name}-{version}-py3-none-any.whl"
-  }
+  },
   "releases": {
     "0.1.0": {
       "release_notes": [
-        "Feature 1",
-        "Feature 2"
+        "Request-aware LLM model analytics, comparison, and selection engine",
+        "Catalog ingestion from OpenRouter and LiteLLM with deterministic merge",
+        "Token and cost estimation with Decimal precision and provider pricing models",
+        "Workload scenario evaluation and Pareto-optimal model selection",
+        "Reproducible benchmark runner with deterministic evaluators and LLM-as-judge support",
+        "Persistent observation storage with SQLite and in-memory backends",
+        "Interactive CLI (model-compass) with version, doctor, comparison, selection, and benchmark commands",
+        "Safe execution pipeline with LiteLLM backend and cost reconciliation"
       ]
     }
   }
 }
+
