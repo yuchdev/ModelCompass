@@ -110,3 +110,25 @@ def test_release_workflow_sanity():
     pub_job = jobs.get("publish-pypi", {})
     perms = pub_job.get("permissions", {})
     assert perms.get("id-token") == "write", "Publish job must have id-token: write for Trusted Publishing"
+
+
+@pytest.mark.unit
+def test_workflow_actions_security():
+    """[Unit] Workflow security verification for pinned actions dependencies.
+
+    Scenario: Verifies that actions/download-artifact is pinned to >= 4.1.3 to avoid arbitrary file write vulnerability.
+    Boundaries: Local YAML file parsing; no GitHub API interaction.
+    On failure, first check: actions/download-artifact version pin in .github/workflows/*.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    workflows_dir = repo_root / ".github" / "workflows"
+    assert workflows_dir.exists()
+
+    for wf_path in workflows_dir.glob("*.yml"):
+        content = wf_path.read_text(encoding="utf-8")
+        assert "actions/download-artifact@v4\n" not in content, (
+            f"Vulnerable actions/download-artifact@v4 found in {wf_path.name}; must be >= 4.1.3"
+        )
+        assert "actions/download-artifact@v4 " not in content, (
+            f"Vulnerable actions/download-artifact@v4 found in {wf_path.name}; must be >= 4.1.3"
+        )
