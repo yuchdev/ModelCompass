@@ -65,6 +65,7 @@ For example the module `sound.effects.echo` may be imported as follows:
 
 ```python
 from sound.effects import echo
+
 ...
 echo.EchoFilter(input, output, delay=0.7, atten=4)
 ```
@@ -167,7 +168,7 @@ Yes:
 ```python
 def connect_to_next_port(self, minimum: int) -> int:
     """Connects to the next available port.
-  
+
     :param minimum: A port value greater or equal to 1024.
     :returns: The new minimum port.
     :raises ConnectionError: If no available port is found.
@@ -176,13 +177,12 @@ def connect_to_next_port(self, minimum: int) -> int:
         # Note that this raising of ValueError is not mentioned in the doc
         # string's "Raises:" section because it is not appropriate to
         # guarantee this specific behavioral reaction to API misuse.
-        raise ValueError(f'Min. port must be at least 1024, not {minimum}.')
+        raise ValueError(f"Min. port must be at least 1024, not {minimum}.")
     port = self._find_next_open_port(minimum)
     if port is None:
-        raise ConnectionError(
-            f'Could not connect to service on port {minimum} or higher.')
+        raise ConnectionError(f"Could not connect to service on port {minimum} or higher.")
     # The code does not depend on the result of this assert.
-    assert port >= minimum, (f'Unexpected port {port} when minimum was {minimum}.')
+    assert port >= minimum, f"Unexpected port {port} when minimum was {minimum}."
     return port
 ```
 
@@ -196,7 +196,7 @@ def connect_to_next_port(self, minimum: int) -> int:
 
     :returns: the minimum port
     """
-    assert minimum >= 1024, 'Minimum port must be at least 1024.'
+    assert minimum >= 1024, "Minimum port must be at least 1024."
 
     # The following code depends on the previous assert.
     port = self._find_next_open_port(minimum)
@@ -345,14 +345,7 @@ No:
 ```python
 result = [(x, y) for x in range(10) for y in range(5) if x * y > 10]
 
-return (
-    (x, y, z)
-    for x in range(5)
-    for y in range(5)
-    if x != y
-    for z in range(5)
-    if y != z
-)
+return ((x, y, z) for x in range(5) for y in range(5) if x != y for z in range(5) if y != z)
 ```
 
 <a id="s8-default-iterators-and-operators"></a>
@@ -384,10 +377,14 @@ Prefer these methods to methods that return lists, except that you should not mu
 Yes:
 
 ```python
-for key in adict: ...
-if obj in alist: ...
-for line in afile: ...
-for k, v in adict.items(): ...
+for key in adict:
+    ...
+if obj in alist:
+    ...
+for line in afile:
+    ...
+for k, v in adict.items():
+    ...
 ```
 
 <a id="s9-generators"></a>
@@ -472,28 +469,22 @@ Use a complete `if` statement when things get more complicated.
 Yes:
 
 ```python
-one_line = 'yes' if predicate(value) else 'no'
+one_line = "yes" if predicate(value) else "no"
 
-slightly_split = (
-  'yes' if predicate(value) else 'no, nein, nyet'
-)
+slightly_split = "yes" if predicate(value) else "no, nein, nyet"
 
 the_longest_ternary_style_that_can_be_done = (
-    'yes, true, affirmative, confirmed, correct'
-    if predicate(value)
-    else 'no, false, negative, nay'
+    "yes, true, affirmative, confirmed, correct" if predicate(value) else "no, false, negative, nay"
 )
 ```
 
 No:
 
 ```python
-bad_line_breaking = ('yes' if predicate(value) else
-                     'no')
-portion_too_long = ('yes'
-                    if some_long_module.some_long_predicate_function(
-                        really_long_variable_name)
-                    else 'no, false, negative, nay')
+bad_line_breaking = "yes" if predicate(value) else "no"
+portion_too_long = (
+    "yes" if some_long_module.some_long_predicate_function(really_long_variable_name) else "no, false, negative, nay"
+)
 ```
 
 <a id="s12-default-argument-values"></a>
@@ -604,6 +595,7 @@ An example of the use of this feature is:
 ```python
 def get_adder(summand1: float) -> Callable[[float], float]:
     """Returns a function that adds numbers to a given number."""
+
     def adder(summand2: float) -> float:
         return summand1 + summand2
 
@@ -621,14 +613,17 @@ Can lead to confusing bugs.
 
 ```python
 i = 4
+
+
 def foo(x: Iterable[int]):
     def bar():
-        print(i, end='')
+        print(i, end="")
+
     # ...
     # A bunch of code here
     # ...
     for i in x:  # Ah, i *is* local to foo, so this is what bar sees
-        print(i, end='')
+        print(i, end="")
     bar()
 ```
 

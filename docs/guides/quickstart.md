@@ -38,22 +38,24 @@ from model_compass.domain import (
 )
 
 request = RequestProfile(
-    task='summarization',
+    task="summarization",
     explicit_input_tokens=2_000,
     expected_output_tokens=500,
-    max_cost_usd=Decimal('0.02'),
+    max_cost_usd=Decimal("0.02"),
 )
 profile = ModelProfile(
-    identity=ModelIdentity(provider='demo', model_id='small', canonical_id='demo:small'),
-    capabilities=ModelCapabilities(input_modalities=('text',), output_modalities=('text',)),
-    pricing=Pricing(components={
-        'prompt': PriceComponent(key='prompt', amount=Decimal('0.000001')),
-        'completion': PriceComponent(key='completion', amount=Decimal('0.000002')),
-    }),
+    identity=ModelIdentity(provider="demo", model_id="small", canonical_id="demo:small"),
+    capabilities=ModelCapabilities(input_modalities=("text",), output_modalities=("text",)),
+    pricing=Pricing(
+        components={
+            "prompt": PriceComponent(key="prompt", amount=Decimal("0.000001")),
+            "completion": PriceComponent(key="completion", amount=Decimal("0.000002")),
+        }
+    ),
     retrieved_at=datetime.now(UTC),
 )
 result = analytics.select([profile], request, policy=SelectionPolicy.CHEAPEST)
-print(result.selected.model_id if result.selected else 'no eligible model')
+print(result.selected.model_id if result.selected else "no eligible model")
 ```
 
 The example stays offline: it uses synthetic profiles and a local selection call. For catalog-backed workflows, see the [catalog guide](catalogs.md) and [offline use guide](offline-use.md).

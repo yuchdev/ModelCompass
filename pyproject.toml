@@ -12,12 +12,21 @@ requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = [
+    "analytics",
+    "benchmarks",
+    "cost-estimation",
+    "llm",
+    "model-comparison",
+    "model-selection",
+    "pareto",
+    "pricing",
 ]
 dependencies = [
     "httpx>=0.27",
@@ -31,10 +40,12 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/yuchdev/ModelCompass"
 Repository = "https://github.com/yuchdev/ModelCompass"
+Documentation = "https://yuchdev.github.io/ModelCompass"
 Issues = "https://github.com/yuchdev/ModelCompass/issues"
 
 [project.scripts]
 model-compass = "model_compass.cli:app"
+model-analytics = "model_compass.cli:app"
 
 [dependency-groups]
 dev = [
@@ -53,6 +64,9 @@ docs = [
     "mkdocs-material>=9.0",
     "mkdocstrings[python]>=0.27",
 ]
+
+[tool.uv.build-backend]
+module-name = ["model_compass", "model_analytics"]
 
 [tool.mypy]
 strict = true

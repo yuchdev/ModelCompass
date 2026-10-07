@@ -50,6 +50,7 @@ nav:
       - Executing with LiteLLM: guides/litellm.md
       - Benchmarks: guides/benchmarks.md
       - Custom evaluators: guides/custom-evaluators.md
+      - Releasing: guides/releasing.md
   - Testing:
       - Overview: testing.md
       - Taxonomy: qa/testing.md

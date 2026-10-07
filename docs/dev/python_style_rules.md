@@ -36,8 +36,7 @@ When a literal string doesn't fit on a single line, use parentheses for
 implicit line joining.
 
 ```python
-x = ('This will build a very long long '
-    'long long long long long long string')
+x = "This will build a very long long long long long long long long string"
 ```
 
 Prefer to break lines at the highest possible syntactic level. If you
@@ -47,29 +46,20 @@ times.
 Yes: 
 
 ```python
-bridgekeeper.answer(
-    name="Arthur", quest=questlib.find(owner="Arthur", perilous=True)
-)
+bridgekeeper.answer(name="Arthur", quest=questlib.find(owner="Arthur", perilous=True))
 
-answer = (a_long_line().of_chained_methods()
-      .that_eventually_provides().an_answer())
+answer = a_long_line().of_chained_methods().that_eventually_provides().an_answer()
 
-if (
-    config is None
-    or 'editor.language' not in config
-    or config['editor.language'].use_spaces is False
-):
+if config is None or "editor.language" not in config or config["editor.language"].use_spaces is False:
     use_tabs()
 ```
 
 No:
 
 ```python
-bridgekeeper.answer(name="Arthur", quest=questlib.find(owner="Arthur", 
-perilous=True))
-if (config is None or 'editor.language' not in config or config[
-  'editor.language'].use_spaces is False):
-  use_tabs()
+bridgekeeper.answer(name="Arthur", quest=questlib.find(owner="Arthur", perilous=True))
+if config is None or "editor.language" not in config or config["editor.language"].use_spaces is False:
+    use_tabs()
 ```
 
 Within comments, put long URLs on one line
@@ -120,21 +110,25 @@ return foo
 
 return spam, beans
 
-dish = (spam, beans,)
+dish = (
+    spam,
+    beans,
+)
 
-for (x, y) in dict.items(): ...
+for x, y in dict.items():
+    ...
 ```
 
 No:
 
 ```python
-if (x):
+if x:
     bar()
 
-if not(x):
+if not (x):
     bar()
 
-return (foo)
+return foo
 ```
 
 Parentheses are redundant for returning the tuple:
@@ -217,13 +211,22 @@ Trailing commas in sequences of items are recommended only when the closing cont
 Yes:
 
 ```python
-golomb3 = (0, 1, 3,)
+golomb3 = (
+    0,
+    1,
+    3,
+)
 ```
 
 No:
 
 ```python
-golomb4 = [0, 1, 4, 6,]
+golomb4 = [
+    0,
+    1,
+    4,
+    6,
+]
 ```
 
 ## 5. Blank Lines
@@ -263,10 +266,10 @@ x, y = y, x
 No:
 
 ```python
-if x == 4 :
-    print(x , y)
+if x == 4:
+    print(x, y)
 
-x , y = y , x
+x, y = y, x
 ```
 
 No whitespace before the open paren/bracket that starts an argument list, indexing or slicing.
@@ -278,17 +281,17 @@ spam(1)
 ```
 
 ```python
-dict['key'] = list[index]
+dict["key"] = list[index]
 ```
 
 No:
 
 ```python
-spam (1)
+spam(1)
 ```
 
 ```python
-dict ['key'] = list [index]
+dict["key"] = list[index]
 ```
 
 No trailing whitespace.
@@ -305,7 +308,7 @@ x == 1
 No:
 
 ```python
-x<1
+x < 1
 ```
 
 Never use spaces around `=` when passing keyword arguments or defining a default parameter value, with one exception: [when a type annotation is present](#typing-default-values), *do* use spaces around the `=` for the default parameter value.
@@ -313,15 +316,23 @@ Never use spaces around `=` when passing keyword arguments or defining a default
 Yes:
 
 ```python
-def complex(real, imag=0.0): return Magic(r=real, i=imag)
-def complex(real, imag: float = 0.0): return Magic(r=real, i=imag)
+def complex(real, imag=0.0):
+    return Magic(r=real, i=imag)
+
+
+def complex(real, imag: float = 0.0):
+    return Magic(r=real, i=imag)
 ```
 
 No:
 
 ```python
-def complex(real, imag = 0.0): return Magic(r = real, i = imag)
-def complex(real, imag: float=0.0): return Magic(r = real, i = imag)
+def complex(real, imag=0.0):
+    return Magic(r=real, i=imag)
+
+
+def complex(real, imag: float = 0.0):
+    return Magic(r=real, i=imag)
 ```
 
 Don't use spaces to vertically align tokens on consecutive lines, since it becomes a maintenance burden (applies to `:`, `#`, `=`, etc.):
@@ -333,20 +344,20 @@ foo = 1000  # comment
 long_name = 2  # comment that should not be aligned
 
 dictionary = {
-    'foo': 1,
-    'long_name': 2,
+    "foo": 1,
+    "long_name": 2,
 }
 ```
 
 No:
 
 ```python
-foo       = 1000  # comment
-long_name = 2     # comment that should not be aligned
+foo = 1000  # comment
+long_name = 2  # comment that should not be aligned
 
 dictionary = {
-    'foo'      : 1,
-    'long_name': 2,
+    "foo": 1,
+    "long_name": 2,
 }
 ```
 
@@ -561,10 +572,11 @@ Yes:
 
 ```python
 class CheeseShopAddress:
-    """The address of a cheese shop.  
+    """The address of a cheese shop.
     ...
     """
-  
+
+
 class OutOfCheeseError(Exception):
     """No more cheese is available."""
 ```
@@ -573,10 +585,11 @@ No:
 
 ```python
 class CheeseShopAddress:
-    """Class that describes the address of a cheese shop.  
+    """Class that describes the address of a cheese shop.
     ...
     """
-  
+
+
 class OutOfCheeseError(Exception):
     """Raised when no more cheese is available."""
 ```
@@ -636,20 +649,20 @@ A single string join with `+` is okay but never format with `+`
 Yes:
 
 ```python
-x = f'name: {name}; score: {n}'
-x = '{}, {}'.format(first, second)
-x = 'name: {}; score: {}'.format(name, n)
+x = f"name: {name}; score: {n}"
+x = "{}, {}".format(first, second)
+x = "name: {}; score: {}".format(name, n)
 x = a + b
 ```
 
 No: 
 
 ```python
-x = first + ', ' + second
-x = 'name: ' + name + '; score: ' + str(n)
-x = '%s, %s!' % (imperative, expletive)
-x = 'name: %s; score: %d' % (name, n)
-x = 'name: %(name)s; score: %(score)d' % {'name':name, 'score':n}
+x = first + ", " + second
+x = "name: " + name + "; score: " + str(n)
+x = "%s, %s!" % (imperative, expletive)
+x = "name: %s; score: %d" % (name, n)
+x = "name: %(name)s; score: %(score)d" % {"name": name, "score": n}
 ```
 
 Avoid using the `+` and `+=` operators to accumulate a string within a loop. 
@@ -662,20 +675,20 @@ These techniques consistently have amortized-linear run-time complexity.
 Yes:
 
 ```python
-items = ['<table>']
+items = ["<table>"]
 for last_name, first_name in employee_list:
-    items.append('<tr><td>%s, %s</td></tr>' % (last_name, first_name))
-items.append('</table>')
-employee_table = ''.join(items)
+    items.append("<tr><td>%s, %s</td></tr>" % (last_name, first_name))
+items.append("</table>")
+employee_table = "".join(items)
 ```
 
 No:
 
 ```python
-employee_table = '<table>'
+employee_table = "<table>"
 for last_name, first_name in employee_list:
-    employee_table += '<tr><td>%s, %s</td></tr>' % (last_name, first_name)
-employee_table += '</table>'
+    employee_table += "<tr><td>%s, %s</td></tr>" % (last_name, first_name)
+employee_table += "</table>"
 ```
 
 Be consistent with your choice of string quote character within a file.
@@ -685,17 +698,17 @@ It is okay to use the other quote character on a string to avoid the need to bac
 Yes:
 
 ```python
-  Python('Why are you hiding your eyes?')
-  Gollum("I'm scared of lint errors.")
-  Narrator('"Good!" thought a happy Python reviewer.')
+Python("Why are you hiding your eyes?")
+Gollum("I'm scared of lint errors.")
+Narrator('"Good!" thought a happy Python reviewer.')
 ```
 
 No:
 
 ```python
-  Python("Why are you hiding your eyes?")
-  Gollum('The lint. It burns. It burns us.')
-  Gollum("Always the great lint. Watching. Watching.")
+Python("Why are you hiding your eyes?")
+Gollum("The lint. It burns. It burns us.")
+Gollum("Always the great lint. Watching. Watching.")
 ```
 
 Use `"""` for multi-line strings rather than `'''`.
@@ -724,13 +737,11 @@ long_string = """This is fine if your use case can accept
 ```
 
 ```python
-long_string = ("And this is fine if you cannot accept\n" +
-               "extraneous leading spaces.")
+long_string = "And this is fine if you cannot accept\n" + "extraneous leading spaces."
 ```
 
 ```python
-long_string = ("And this too is fine if you cannot accept\n"
-               "extraneous leading spaces.")
+long_string = "And this too is fine if you cannot accept\nextraneous leading spaces."
 ```
 
 ```python
@@ -768,12 +779,12 @@ Yes (consistent f-strings):
 import os
 from absl import logging
 
-pager = os.getenv('PAGER', default='')
-logging.info(f'Current $PAGER is: {pager}')
+pager = os.getenv("PAGER", default="")
+logging.info(f"Current $PAGER is: {pager}")
 
-homedir = os.getenv('HOME')
+homedir = os.getenv("HOME")
 if homedir is None or not os.access(homedir, os.W_OK):
-    logging.error(f'Cannot write to home directory, $HOME={homedir!r}')
+    logging.error(f"Cannot write to home directory, $HOME={homedir!r}")
 ```
 
 
@@ -783,11 +794,11 @@ Yes (consistent %-strings):
 import os
 from absl import logging
 
-logging.info('Current $PAGER is: %s', os.getenv('PAGER', default=''))
+logging.info("Current $PAGER is: %s", os.getenv("PAGER", default=""))
 
-homedir = os.getenv('HOME')
+homedir = os.getenv("HOME")
 if homedir is None or not os.access(homedir, os.W_OK):
-    logging.error('Cannot write to home directory, $HOME=%r', homedir)
+    logging.error("Cannot write to home directory, $HOME=%r", homedir)
 ```
 
 Yes (Python 3.15+, consistent t-strings):
@@ -796,12 +807,12 @@ Yes (Python 3.15+, consistent t-strings):
 import os
 from absl import logging
 
-pager = os.getenv('PAGER', default='')
-logging.info(t'Current $PAGER is: {pager}')
+pager = os.getenv("PAGER", default="")
+logging.info(t"Current $PAGER is: {pager}")
 
-homedir = os.getenv('HOME')
+homedir = os.getenv("HOME")
 if homedir is None or not os.access(homedir, os.W_OK):
-    logging.error(t'Cannot write to home directory, $HOME={homedir!r}')
+    logging.error(t"Cannot write to home directory, $HOME={homedir!r}")
 ```
 
 No (mixed styles in one project):
@@ -810,12 +821,12 @@ No (mixed styles in one project):
 import os
 from absl import logging
 
-pager = os.getenv('PAGER', default='')
-logging.info('Current $PAGER is: %s', pager)
+pager = os.getenv("PAGER", default="")
+logging.info("Current $PAGER is: %s", pager)
 
-homedir = os.getenv('HOME')
+homedir = os.getenv("HOME")
 if homedir is None or not os.access(homedir, os.W_OK):
-    logging.error(f'Cannot write to home directory, $HOME={homedir!r}')
+    logging.error(f"Cannot write to home directory, $HOME={homedir!r}")
 ```
 
 ### 10.2 Error Messages
@@ -832,20 +843,19 @@ Yes:
 
 ```python
 if not 0 <= p <= 1:
-    raise ValueError(f'Not a probability: {p=}')
+    raise ValueError(f"Not a probability: {p=}")
 
 try:
     os.rmdir(workdir)
 except OSError as error:
-    logging.warning('Could not remove directory (reason: %r): %r',
-                    error, workdir)
+    logging.warning("Could not remove directory (reason: %r): %r", error, workdir)
 ```
 
 No:
 
 ```python
 if p < 0 or p > 1:  # PROBLEM: also false for float('nan')!
-    raise ValueError(f'Not a probability: {p=}')
+    raise ValueError(f"Not a probability: {p=}")
 
 try:
     os.rmdir(workdir)
@@ -853,7 +863,7 @@ except OSError:
     # PROBLEM: Message makes an assumption that might not be true:
     # Deletion might have failed for some other reason, misleading
     # whoever has to debug this.
-    logging.warning('Directory already was deleted: %s', workdir)
+    logging.warning("Directory already was deleted: %s", workdir)
 
 try:
     os.rmdir(workdir)
@@ -863,7 +873,7 @@ except OSError:
     # Imagine someone calling a library function with such code
     # using a name such as workdir = 'deleted'. The warning would read:
     # "The deleted directory could not be deleted."
-    logging.warning('The %s directory could not be deleted.', workdir)
+    logging.warning("The %s directory could not be deleted.", workdir)
 ```
 
 ## 11. Files, Sockets, and similar Stateful Resources
@@ -1022,24 +1032,30 @@ The only exception is an `if` if there is no `else`.
 Yes:
 
 ```python
-if foo: 
+if foo:
     bar(foo)
 
-if foo: bar(foo)
+if foo:
+    bar(foo)
 ```
 
 No:
 
 ```python
-if foo: bar(foo)
-else:   baz(foo)
-
-try:               bar(foo)
-except ValueError: baz(foo)
+if foo:
+    bar(foo)
+else:
+    baz(foo)
 
 try:
     bar(foo)
-except ValueError: baz(foo)
+except ValueError:
+    baz(foo)
+
+try:
+    bar(foo)
+except ValueError:
+    baz(foo)
 ```
 
 ## 15. Getters and Setters
@@ -1132,13 +1148,16 @@ When using [absl](https://github.com/abseil/abseil-py), use `app.run`:
 
 ```python
 from absl import app
+
 ...
+
 
 def main(argv: Sequence[str]):
     # process non-flag arguments
     ...
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app.run(main)
 ```
 
@@ -1149,7 +1168,8 @@ def main():
     ...
     return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(main())
 ```
 
@@ -1185,13 +1205,12 @@ Do not be intimidated by refactoring existing code, and consider breaking up the
 ```python
 from typing import Self
 
+
 class BaseClass:
     @classmethod
-    def create(cls) -> Self:
-        ...
-  
-    def difference(self, other: Self) -> float:
-        ...
+    def create(cls) -> Self: ...
+
+    def difference(self, other: Self) -> float: ...
 ```
 
 - Similarly, don't feel compelled to annotate the return value of `__init__`
@@ -1213,15 +1232,13 @@ def my_method(
     first_var: int,
     second_var: Foo,
     third_var: Optional[Bar],
-) -> int:
-    ...
+) -> int: ...
 ```
 
 However, if everything fits on the same line, go for it.
 
 ```python
-def my_method(self, first_var: int) -> int:
-    ...
+def my_method(self, first_var: int) -> int: ...
 ```
 
 If the combination of the function name, the last parameter, and the return type is too long, indent by 4 in a new line.
@@ -1234,8 +1251,7 @@ Yes:
 def my_method(
     self,
     other_arg: Optional[MyLongType],
-) -> tuple[MyLongType1, MyLongType1]:
-    ...
+) -> tuple[MyLongType1, MyLongType1]: ...
 ```
 
 Optionally, the return type may be put on the same line as the last
@@ -1244,11 +1260,7 @@ parameter:
 Yes:
 
 ```python
-def my_method(
-    self,
-    first_var: int,
-    second_var: int) -> dict[OtherLongType, MyLongType]:
-  ...
+def my_method(self, first_var: int, second_var: int) -> dict[OtherLongType, MyLongType]: ...
 ```
 
 `pylint` allows you to move the closing parenthesis to a new line and align with the opening one, but this is less readable.
@@ -1256,10 +1268,10 @@ def my_method(
 No:
 
 ```python
-def my_method(self,
-              other_arg: Optional[MyLongType],
-             ) -> dict[OtherLongType, MyLongType]:
-        ...
+def my_method(
+    self,
+    other_arg: Optional[MyLongType],
+) -> dict[OtherLongType, MyLongType]: ...
 ```
 
 As in the examples above, prefer not to break types. 
@@ -1273,12 +1285,9 @@ No:
 ```python
 def my_method(
     self,
-    first_var: tuple[list[MyLongType1],
-                     list[MyLongType2]],
-    second_var: list[dict[
-        MyLongType3, MyLongType4]],
-):
-        ...
+    first_var: tuple[list[MyLongType1], list[MyLongType2]],
+    second_var: list[dict[MyLongType3, MyLongType4]],
+): ...
 ```
 
 If a single name and type is too long, consider using an [alias](#typing-aliases) for the type. The last resort is to break after the colon and indent by 4.
@@ -1287,28 +1296,25 @@ Yes:
 
 ```python
 def my_function(
-    long_variable_name:
-        long_module_name.LongTypeName,
-):
-  ...
+    long_variable_name: long_module_name.LongTypeName,
+): ...
 ```
 
 ```python
 T = long_module_name.LongTypeName
+
+
 def my_function(
     long_variable_name: T,
-):
-  ...
+): ...
 ```
 
 No:
 
 ```python
 def my_function(
-    long_variable_name: long_module_name.
-        LongTypeName,
-):
-  ...
+    long_variable_name: long_module_name.LongTypeName,
+): ...
 ```
 
 ### 19.3 Forward Declarations
@@ -1343,15 +1349,13 @@ As per PEP-008, use spaces around the `=` *only* for arguments that have both a 
 Yes:
 
 ```python
-def func(a: int = 0) -> int:
-    ...
+def func(a: int = 0) -> int: ...
 ```
 
 No:
 
 ```python
-def func(a:int=0) -> int:
-    ...
+def func(a: int = 0) -> int: ...
 ```
 
 ### 19.5 NoneType
@@ -1365,21 +1369,19 @@ Use explicit `Optional[X]` instead of implicit.
 Yes:
 
 ```python
-def union_optional(a: Union[str, int, None], b: Optional[str] = None) -> str:
-    ...
+def union_optional(a: Union[str, int, None], b: Optional[str] = None) -> str: ...
 ```
 
 No:
 
 ```python
-def union_type(a: str | int | None, b: str | None = None) -> str:
-    ...
+def union_type(a: str | int | None, b: str | None = None) -> str: ...
 
-def nullable_union(a: Union[None, str]) -> str:
-    ...
 
-def implicit_optional(a: str = None) -> str:
-    ...
+def nullable_union(a: Union[None, str]) -> str: ...
+
+
+def implicit_optional(a: str = None) -> str: ...
 ```
 
 <a id="typing-aliases"></a>
@@ -1473,6 +1475,8 @@ A `TypeVar` can be constrained:
 
 ```python
 AddableType = TypeVar("AddableType", int, float, str)
+
+
 def add(a: AddableType, b: AddableType) -> AddableType:
     return a + b
 ```
@@ -1524,10 +1528,8 @@ Use `str` for string/text data.
 For code that deals with binary data, use `bytes`.
 
 ```python
-def deals_with_text_data(x: str) -> str:
-    ...
-def deals_with_binary_data(x: bytes) -> bytes:
-    ...
+def deals_with_text_data(x: str) -> str: ...
+def deals_with_binary_data(x: bytes) -> bytes: ...
 ```
 
 <a id="typing-imports"></a>
@@ -1561,15 +1563,15 @@ If you need to use a concrete type (for example, a `tuple` of typed elements), p
 ```python
 from typing import List, Tuple
 
-def transform_coordinates(original: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    ...
+
+def transform_coordinates(original: list[tuple[float, float]]) -> list[tuple[float, float]]: ...
 ```
 
 ```python
 from collections.abc import Sequence
 
-def transform_coordinates(original: Sequence[tuple[float, float]]) -> Sequence[tuple[float, float]]:
-    ...
+
+def transform_coordinates(original: Sequence[tuple[float, float]]) -> Sequence[tuple[float, float]]: ...
 ```
 
 ### 19.13 Conditional Imports
@@ -1599,8 +1601,7 @@ some_mod = Any  # some_mod.py imports this module.
 ...
 
 
-def my_method(self, var: "some_mod.SomeType"):
-    ...
+def my_method(self, var: "some_mod.SomeType"): ...
 ```
 
 ### 19.15 Generics
@@ -1610,16 +1611,14 @@ When annotating, prefer to specify type parameters for [generic](https://docs.py
 Yes:
 
 ```python
-def get_names(employee_ids: Sequence[int]) -> Mapping[int, str]:
-    ...
+def get_names(employee_ids: Sequence[int]) -> Mapping[int, str]: ...
 ```
 
 No:
 
 ```python
 # This is interpreted as get_names(employee_ids: Sequence[Any]) -> Mapping[Any, Any]
-def get_names(employee_ids: Sequence) -> Mapping:
-    ...
+def get_names(employee_ids: Sequence) -> Mapping: ...
 ```
 
 If the best type parameter for a generic is `Any`, make it explicit, but remember that in many cases [`TypeVar`](#typing-type-var) might be more appropriate:
@@ -1634,7 +1633,8 @@ def get_names(employee_ids: Sequence[Any]) -> Mapping[Any, str]:
 Yes:
 
 ```python
-_T = TypeVar('_T')
+_T = TypeVar("_T")
+
 
 def get_names(employee_ids: Sequence[_T]) -> Mapping[_T, str]:
     """Returns a mapping from employee ID to employee name for given IDs."""

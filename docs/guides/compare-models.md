@@ -9,12 +9,12 @@ from model_compass import RequestProfile
 from model_compass.metrics import FallbackTokenEstimator
 from model_compass.selection import compare_models
 
-request = RequestProfile(task='code_review', explicit_input_tokens=12_000, expected_output_tokens=1_000)
+request = RequestProfile(task="code_review", explicit_input_tokens=12_000, expected_output_tokens=1_000)
 report = compare_models(
     models,
     request,
     FallbackTokenEstimator(),
-    max_cost_usd=Decimal('0.05'),
+    max_cost_usd=Decimal("0.05"),
 )
 for candidate in report.candidates:
     print(candidate.model.identity.canonical_id, candidate.eligibility.eligible, candidate.cost.total)

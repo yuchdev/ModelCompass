@@ -103,10 +103,10 @@ result = await analytics.select_and_execute(
     execution_request=execution_request,
     policy="cheapest",
 )
-result.selection        # SelectionResult
-result.execution        # ExecutionResult
-result.observation_id   # id of the stored observation
-result.reconciliation   # CostReconciliation vs. the selector's expected cost
+result.selection  # SelectionResult
+result.execution  # ExecutionResult
+result.observation_id  # id of the stored observation
+result.reconciliation  # CostReconciliation vs. the selector's expected cost
 ```
 
 The selected model replaces `execution_request.model_id`. If no model is eligible,

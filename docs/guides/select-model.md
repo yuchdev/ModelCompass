@@ -11,20 +11,20 @@ from model_compass import RequestProfile, SelectionPolicy, analytics
 from model_compass.selection import InMemoryQualityProvider, MetricEvidence
 
 request = RequestProfile(
-    task='summarization',
+    task="summarization",
     explicit_input_tokens=4_000,
     expected_output_tokens=500,
-    min_quality=Decimal('0.85'),
-    max_cost_usd=Decimal('0.02'),
+    min_quality=Decimal("0.85"),
+    max_cost_usd=Decimal("0.02"),
 )
 provider = InMemoryQualityProvider(
     {
-        'demo:small': MetricEvidence(value=Decimal('0.91'), source='benchmark', task='summarization', sample_count=12),
-        'demo:large': MetricEvidence(value=Decimal('0.97'), source='benchmark', task='summarization', sample_count=12),
+        "demo:small": MetricEvidence(value=Decimal("0.91"), source="benchmark", task="summarization", sample_count=12),
+        "demo:large": MetricEvidence(value=Decimal("0.97"), source="benchmark", task="summarization", sample_count=12),
     }
 )
 result = analytics.select(profiles, request, policy=SelectionPolicy.CHEAPEST, quality_provider=provider)
-print(result.selected.model_id if result.selected else 'no eligible model')
+print(result.selected.model_id if result.selected else "no eligible model")
 ```
 
 Hard filters run before ranking, so a model that fails the quality, cost, context, capability, or allow/block checks never reaches the objective ranker.

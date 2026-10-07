@@ -149,19 +149,23 @@ profiles = [
     ModelProfile(
         identity=ModelIdentity(provider="demo", model_id="small", canonical_id="demo:small"),
         capabilities=ModelCapabilities(input_modalities=("text",), output_modalities=("text",)),
-        pricing=Pricing(components={
-            "prompt": PriceComponent(key="prompt", amount=Decimal("0.000001")),
-            "completion": PriceComponent(key="completion", amount=Decimal("0.000002")),
-        }),
+        pricing=Pricing(
+            components={
+                "prompt": PriceComponent(key="prompt", amount=Decimal("0.000001")),
+                "completion": PriceComponent(key="completion", amount=Decimal("0.000002")),
+            }
+        ),
         retrieved_at=datetime.now(UTC),
     ),
     ModelProfile(
         identity=ModelIdentity(provider="demo", model_id="large", canonical_id="demo:large"),
         capabilities=ModelCapabilities(input_modalities=("text",), output_modalities=("text",)),
-        pricing=Pricing(components={
-            "prompt": PriceComponent(key="prompt", amount=Decimal("0.000003")),
-            "completion": PriceComponent(key="completion", amount=Decimal("0.000006")),
-        }),
+        pricing=Pricing(
+            components={
+                "prompt": PriceComponent(key="prompt", amount=Decimal("0.000003")),
+                "completion": PriceComponent(key="completion", amount=Decimal("0.000006")),
+            }
+        ),
         retrieved_at=datetime.now(UTC),
     ),
 ]
