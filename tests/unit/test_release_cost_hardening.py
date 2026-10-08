@@ -5,13 +5,14 @@ from decimal import Decimal
 
 import pytest
 
-from model_compass.domain import ModelIdentity, ModelProfile, PriceComponent, Pricing
+from model_compass.domain import ModelCapabilities, ModelIdentity, ModelProfile, PriceComponent, Pricing
 from model_compass.metrics import TokenEstimate, estimate_cost
 
 
 def _profile() -> ModelProfile:
     return ModelProfile(
         identity=ModelIdentity(provider="test", model_id="metered", canonical_id="test:metered"),
+        capabilities=ModelCapabilities(),
         pricing=Pricing(
             components={
                 "prompt": PriceComponent(key="prompt", amount=Decimal("0.01")),
