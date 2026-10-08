@@ -49,6 +49,12 @@ def estimate_cost(
     now_utc: Optional[datetime] = None,
 ) -> CostEstimate:
     """Estimate cost; missing prices for used components make it incomplete."""
+    reserved_components = frozenset(
+        {"prompt", "completion", "input_cache_read", "input_cache_write", "internal_reasoning", "request"}
+    )
+    overlapping = reserved_components.intersection(unit_usage or {})
+    if overlapping:
+        raise ValueError(f"unit_usage overlaps built-in components: {', '.join(sorted(overlapping))}")
     usage_values = {
         "input_cache_read": Decimal(cached_input_read_tokens),
         "input_cache_write": Decimal(cached_input_write_tokens),
@@ -67,9 +73,11 @@ def estimate_cost(
     usage_values["prompt"] = Decimal(regular_input)
     usage_values["completion"] = Decimal(regular_output)
     for key, usage in (unit_usage or {}).items():
+        if isinstance(usage, bool) or not isinstance(usage, (int, Decimal)):
+            raise ValueError("unit usage must be a Decimal or integer")
         parsed = Decimal(usage)
-        if parsed < 0:
-            raise ValueError("unit usage must be non-negative")
+        if not parsed.is_finite() or parsed < 0:
+            raise ValueError("unit usage must be finite and non-negative")
         usage_values[key] = usage_values.get(key, Decimal(0)) + parsed
 
     prices = model.pricing.effective_components(
@@ -102,10 +110,10 @@ def estimate_cost(
 
     for key, usage in sorted((unit_usage or {}).items()):
         price = prices.get(key)
-        priced = _add_priced_usage(key, Decimal(usage), price, components, assumptions)
-        if not priced and usage > 0 and price is not None:
+        priced = _add_priced_usage(key, usage_values[key], price, components, assumptions)
+        if not priced and usage_values[key] > 0 and price is not None:
             complete = False
-        if usage > 0 and price is None:
+        if usage_values[key] > 0 and price is None:
             complete = False
 
     request_price = prices.get("request")
