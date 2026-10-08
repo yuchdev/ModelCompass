@@ -51,6 +51,8 @@ nav:
       - Benchmarks: guides/benchmarks.md
       - Custom evaluators: guides/custom-evaluators.md
       - Releasing: guides/releasing.md
+      - v0.1 release checklist: release-checklist.md
+      - Post-v0.1 backlog: post-v0.1-backlog.md
   - Testing:
       - Overview: testing.md
       - Taxonomy: qa/testing.md
