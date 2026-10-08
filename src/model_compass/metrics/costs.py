@@ -49,7 +49,9 @@ def estimate_cost(
     now_utc: Optional[datetime] = None,
 ) -> CostEstimate:
     """Estimate cost; missing prices for used components make it incomplete."""
-    reserved_components = frozenset({"prompt", "completion", "input_cache_read", "input_cache_write", "internal_reasoning", "request"})
+    reserved_components = frozenset(
+        {"prompt", "completion", "input_cache_read", "input_cache_write", "internal_reasoning", "request"}
+    )
     overlapping = reserved_components.intersection(unit_usage or {})
     if overlapping:
         raise ValueError(f"unit_usage overlaps built-in components: {', '.join(sorted(overlapping))}")
