@@ -7,7 +7,7 @@ three tasks (`qa`, `extraction`, `summarization`). It was generated with
 `model_compass.benchmarks.dump_dataset_jsonl` and can be round-tripped with
 `load_dataset_jsonl`.
 
-See `docs/guides/benchmarks.md` for the full dataset format and how to run it
+See `docs/guides/10-benchmarks.md` for the full dataset format and how to run it
 against a real or fake execution backend.
 
 ```python

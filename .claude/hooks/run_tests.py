@@ -39,7 +39,7 @@ def _tail(proc: subprocess.CompletedProcess[str], n: int = 40) -> str:
     return "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-n:])
 
 
-def main() -> None:
+def main():
     event = read_event()
     if event.get("stop_hook_active"):
         allow()

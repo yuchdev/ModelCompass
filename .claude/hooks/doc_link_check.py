@@ -65,7 +65,7 @@ def _changed_markdown() -> list[str]:
     return [ln for ln in proc.stdout.splitlines() if ln.strip().lower().endswith(".md")]
 
 
-def _hook_mode() -> None:
+def _hook_mode():
     event = read_event()
     target = edited_path(event)
 
@@ -88,7 +88,7 @@ def _hook_mode() -> None:
     allow()
 
 
-def _cli_mode(argv: list[str]) -> None:
+def _cli_mode(argv: list[str]):
     args = argv[1:] if argv and argv[0] == "--check" else argv
     problems = check(args if args else None)
     for p in problems:

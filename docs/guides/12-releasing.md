@@ -1,8 +1,12 @@
-# Releasing Model Compass
+# 12. Releasing Model Compass
+
+**Level:** maintainer · **Time:** 45 minutes · **Needs:** write access to the repository and a PyPI project
+
+In this tutorial you will cut a release from validation to post-release smoke test, and learn how to recover from a bad one.
 
 This guide outlines the release process, package validation, PyPI/TestPyPI Trusted Publishing setup, and rollback/yank guidance for Model Compass.
 
-## Versioning Strategy
+## Step 1: Understand versioning
 
 Model Compass follows [Semantic Versioning 2.0.0](https://semver.org/).
 For early development (0.y.z):
@@ -26,7 +30,7 @@ import model_analytics
 print(model_analytics.__version__)
 ```
 
-## Release Artifacts
+## Step 2: Know what gets built
 
 Release builds produce two standardized distribution formats:
 1. **Source distribution (`sdist`)**: `.tar.gz` containing source code, license, documentation, and build metadata.
@@ -43,7 +47,7 @@ Release artifacts MUST NOT contain:
 - Secrets or credentials
 - Version control metadata (`.git`)
 
-## Trusted Publishing Setup
+## Step 3: Set up Trusted Publishing (once)
 
 Model Compass uses [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) via OpenID Connect (OIDC) tokens instead of long-lived API tokens.
 
@@ -66,9 +70,9 @@ In the GitHub repository settings:
 
 GitHub Actions uses `pypa/gh-action-pypi-publish` with `id-token: write` permissions to obtain short-lived OIDC exchange tokens.
 
-## Step-by-Step Release Workflow
+## Step 4: Run the release
 
-### Step 1: Quality Validation
+### 4a. Validate quality
 
 Ensure all quality gates pass locally before initiating a release:
 
@@ -81,7 +85,7 @@ uv run mkdocs build --strict
 uv build --out-dir .dist
 ```
 
-### Step 2: Prepare Release Notes
+### 4b. Prepare release notes
 
 Update `RELEASE_NOTES.json` with the new version, title, release date, and changelog highlights:
 
@@ -103,7 +107,7 @@ Update `RELEASE_NOTES.json` with the new version, title, release date, and chang
 
 Update `version = "0.1.0"` in `pyproject.toml` if incrementing.
 
-### Step 3: Tag and Trigger
+### 4c. Tag and trigger
 
 Releases are triggered exclusively via git tags or manual `workflow_dispatch`. Normal branch pushes (e.g. `main` or PRs) **cannot** publish to PyPI.
 
@@ -120,7 +124,7 @@ The `.github/workflows/release.yml` workflow will:
 4. Publish artifacts to PyPI (or TestPyPI) via OIDC Trusted Publishing.
 5. Create a GitHub Release referencing the tag and notes.
 
-## Post-Release Verification
+## Step 5: Verify the published package
 
 Verify the published package in a clean environment:
 
@@ -136,7 +140,7 @@ model-compass --help
 model-analytics version
 ```
 
-## Rollback and Yank Guidance
+## Step 6: Recover from a bad release
 
 PyPI does **not** allow re-uploading an existing version, nor deleting a version to re-upload modified artifacts with the same version number. Once published, a version is immutable.
 
@@ -156,3 +160,9 @@ PyPI does **not** allow re-uploading an existing version, nor deleting a version
 
 3. **Never Delete Releases**:
    - Deleting releases on PyPI causes hard dependency breakage for any consumer with pinned lockfiles. Always prefer yanking followed by an immediate patch release.
+
+## What you learned
+
+- That a published version is immutable, so validate before you tag.
+- That tags, not branch pushes, trigger publishing.
+- That the fix for a bad release is to yank it and ship a patch.

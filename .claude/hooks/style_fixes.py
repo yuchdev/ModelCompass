@@ -174,7 +174,7 @@ def _py_files(raw_paths: list[str]) -> list[Path]:
     return files
 
 
-def _hook_mode() -> None:
+def _hook_mode():
     event = read_event()
     target = edited_path(event)
     if target is None or target.suffix != ".py" or not target.exists():
@@ -190,7 +190,7 @@ def _hook_mode() -> None:
     allow()
 
 
-def _check_mode(raw_paths: list[str]) -> None:
+def _check_mode(raw_paths: list[str]):
     problems: list[str] = []
     for f in _py_files(raw_paths or ["."]):
         try:
@@ -210,7 +210,7 @@ def _check_mode(raw_paths: list[str]) -> None:
     sys.exit(0)
 
 
-def _fix_mode(raw_paths: list[str]) -> None:
+def _fix_mode(raw_paths: list[str]):
     for f in _py_files(raw_paths):
         try:
             text = f.read_text(encoding="utf-8")
@@ -222,7 +222,7 @@ def _fix_mode(raw_paths: list[str]) -> None:
             print(f"fixed {f}")
 
 
-def main() -> None:
+def main():
     argv = sys.argv[1:]
     if argv and argv[0] == "--check":
         _check_mode(argv[1:])

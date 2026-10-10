@@ -29,7 +29,7 @@ SUMMARY_KEYS = (
 )
 
 
-def main() -> None:
+def main():
     event = read_event()
     tool = event.get("tool_name", "mcp__github__?")
     fields = tool_input(event)

@@ -1,10 +1,14 @@
-# Execution
+# 09. Execution
+
+**Level:** advanced · **Time:** 30 minutes · **Needs:** [05. Observations](05-observations.md) and [06. Selection](06-selection.md)
+
+In this tutorial you will follow one request from selection through a real call to a stored observation, and learn how cost is reconciled afterwards.
 
 Execution turns a selection into a real model call and measures what happened. It is
 deliberately separate from selection: `selection`, `domain`, and `storage` never import
 LiteLLM or the `execution` package.
 
-## The protocol
+## Step 1: Learn the protocol
 
 ```python
 class ExecutionBackend(Protocol):
@@ -12,10 +16,10 @@ class ExecutionBackend(Protocol):
 ```
 
 Anything implementing `execute` can replace LiteLLM. `LiteLLMBackend` is the shipped
-implementation (see the [LiteLLM guide](../guides/litellm.md)); tests use
+implementation (see the [LiteLLM guide](../guides/09-litellm.md)); tests use
 `tests.fixtures.fake_execution_backend.FakeExecutionBackend`.
 
-## Request
+## Step 2: Build a request
 
 `ExecutionRequest` is a frozen, serializable DTO: `model_id`, `task`, `messages`, optional
 `tools`, optional `response_format` (structured output), `parameters`, `stream`,
@@ -28,7 +32,7 @@ Keys that would make the provider layer switch models behind your back (`fallbac
 `models`, `route`, ...) are rejected too — v1 has no implicit multi-model fallback.
 Caller `metadata` is passed through but never persisted.
 
-## Result
+## Step 3: Read the result
 
 `ExecutionResult` carries the output text, any `tool_calls`, `latency_ms` (monotonic
 clock), `time_to_first_token_ms` (streaming only), `finish_reason` and a derived `status`
@@ -46,7 +50,7 @@ rejects negative values and a `total_tokens` smaller than its input or output, b
 providers disagree on whether cache and reasoning counts are included in or additional to
 input/output.
 
-### Actual versus computed cost
+### Tell actual cost from computed cost
 
 Costs are `Decimal` and kept apart:
 
@@ -55,7 +59,7 @@ Costs are `Decimal` and kept apart:
   when no actual cost is available.
 - `cost_source` — `"provider_reported"`, `"computed"`, or `None`.
 
-## Cost reconciliation
+## Step 4: Reconcile estimated and actual cost
 
 `reconcile_costs(estimated_before, actual_after, actual_source=...)` returns a
 `CostReconciliation(estimated_before, actual_after, absolute_error, relative_error,
@@ -78,7 +82,7 @@ assert r.is_complete
 assert reconcile_costs(Decimal("0.0020"), None).relative_error is None
 ```
 
-## Observations
+## Step 5: See what is stored
 
 A successful execution is stored as a domain `Observation` (no prompt or response text):
 tokens (including cache and reasoning), `actual_cost`, `estimated_cost` (the pre-request
@@ -94,7 +98,7 @@ All are subclasses of `ExecutionError` (a `ModelCompassError`) with a `category`
 Persistence goes through an `ObservationSink` (any store's `record_observation`).
 `NullObservationSink` discards observations for execution without persistence.
 
-## Select and execute
+## Step 6: Select and execute in one call
 
 ```python
 result = await analytics.select_and_execute(
@@ -115,10 +119,17 @@ failure is recorded and re-raised with `observation_id` set on the exception.
 The request profile's task (or `general` when omitted) must match
 `execution_request.task`; mismatches are rejected before selection.
 
-## Retries and fallbacks
+## Step 7: Understand retries and fallbacks
 
 There is no multi-model fallback. LiteLLM may retry the **same** model for transport and
 provider failures when you configure `max_retries` on the backend (bounded at 5, default
 0). Every retry can be billed by the provider, and LiteLLM does not report how many
 occurred; the configured value is in `result.metadata["max_retries"]`. A future fallback
 policy would be an explicit caller-supplied choice.
+
+## What you learned
+
+- Any object with an async `execute` can be a backend.
+- Unreported usage is `None`, never `0`, and estimated and actual costs stay separate.
+- A failed call is recorded without provider error text.
+- There is no hidden multi-model fallback.

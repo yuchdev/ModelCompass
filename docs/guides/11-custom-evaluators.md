@@ -1,4 +1,10 @@
-# Custom evaluators
+# 11. Custom evaluators
+
+**Level:** advanced · **Time:** 40 minutes · **Needs:** [10. Benchmarks](10-benchmarks.md)
+
+In this tutorial you will learn the evaluator contract, pick a built-in evaluator, write your own, and optionally add an LLM judge, including when not to trust it.
+
+## Step 1: Learn the contract
 
 Every evaluator — built-in or custom — implements the same protocol:
 
@@ -15,7 +21,7 @@ in `[0, 1]`, an optional `passed` verdict (only set when a pass/fail notion
 applies), the evaluator's id and version (for reproducibility), a short
 `explanation`, and a `details` dict for anything evaluator-specific.
 
-## Built-in deterministic evaluators
+## Step 2: Pick a built-in evaluator
 
 | `evaluator` id        | Expects on the case                                   | Notes |
 |------------------------|--------------------------------------------------------|-------|
@@ -31,7 +37,7 @@ None of these need a heavy schema dependency — `json_schema` is a small,
 hand-rolled recursive checker, sufficient for the structural checks fixtures
 typically need.
 
-## Writing a custom evaluator
+## Step 3: Write a custom evaluator
 
 ```python
 from decimal import Decimal
@@ -67,7 +73,7 @@ A custom evaluator takes precedence over a built-in one with the same id
 override a built-in's behavior for a specific run. An evaluator can be
 `async def evaluate(...)` instead of synchronous; the runner awaits it if so.
 
-## The optional LLM judge
+## Step 4: Add an LLM judge (optional)
 
 `LLMJudgeEvaluator` is a separate, **opt-in** evaluator — a dataset using
 `evaluator="llm_judge"` does nothing unless the caller explicitly passes an
@@ -104,7 +110,7 @@ all raise `JudgeEvaluationError`, which `run_benchmark` turns into a failed
 `BenchmarkResult` (`score=None`, `error_category="evaluation_failed"`) rather
 than a fake `0`.
 
-### Bias and non-independence
+### Know the judge's limits
 
 An LLM judge is not an independent, ground-truth oracle:
 
@@ -128,3 +134,13 @@ An LLM judge is not an independent, ground-truth oracle:
 The deterministic evaluator suite above works with no API key and no
 network access; the judge is the only evaluator in this package that makes a
 provider call.
+
+## What you learned
+
+- That every evaluator returns a `Decimal` score in `[0, 1]`.
+- How to register a custom evaluator by id, and that it overrides a built-in with the same id.
+- That the judge is opt-in, never grades itself, and never fabricates a score on failure.
+
+## Next
+
+[12. Releasing](12-releasing.md) is for maintainers who ship the package. For how evidence reaches selection, see [Quality evidence](../concepts/08-quality.md).

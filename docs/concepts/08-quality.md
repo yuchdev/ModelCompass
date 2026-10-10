@@ -1,10 +1,14 @@
-# Quality evidence
+# 08. Quality evidence
+
+**Level:** advanced · **Time:** 30 minutes · **Needs:** [06. Selection](06-selection.md) and [the benchmarks guide](../guides/10-benchmarks.md)
+
+In this tutorial you will follow a quality score from its source to the moment selection trusts it, and learn what each step does not claim.
 
 Quality is never one universal number. `model_compass.benchmarks` produces
 **task-scoped** quality evidence, and selection never averages across
 unrelated tasks without an explicit, caller-supplied weighting.
 
-## Where quality evidence comes from
+## Step 1: Find where evidence comes from
 
 Three independent sources feed the same evidence shape
 (`model_compass.domain.QualityEvidence` for storage,
@@ -26,7 +30,7 @@ Three independent sources feed the same evidence shape
    scale is never guessed at, and the import either raises or skips the
    record per the caller's choice.
 
-## Resolving evidence for a request
+## Step 2: Resolve evidence for a request
 
 `model_compass.selection.evidence.resolve_quality_evidence` (and its
 `QualityProvider` adapter, `TieredQualityProvider`) applies an explicit,
@@ -49,7 +53,7 @@ evidence (e.g. everything returned by
 `ObservationStore.list_quality_evidence`) into local and imported buckets
 using the `source` naming convention above.
 
-## Aggregation and confidence
+## Step 3: Aggregate and measure confidence
 
 `summarize_quality` groups scored cases by model and by one dimension at a
 time: `task`, `dataset`, `tag`, or `overall`. `overall` **requires** an
@@ -67,12 +71,22 @@ always produce the same interval
 standard, dependency-free method — not a claim of exact sampling-theory
 guarantees, and it requires at least two scores.
 
-## What this does not claim
+## Step 4: Know the limits
 
 - No benchmark result claims bit-for-bit LLM reproducibility; see
-  `docs/guides/benchmarks.md` for what *is* recorded for reproducibility.
+  `docs/guides/10-benchmarks.md` for what *is* recorded for reproducibility.
 - Budget controls on live runs are conservative estimates, not a guarantee —
-  see the "Budget safety" section of `docs/guides/benchmarks.md`.
+  see the "Budget safety" section of `docs/guides/10-benchmarks.md`.
 - The optional LLM judge is opt-in, never silently invoked, and is
-  documented separately in `docs/guides/custom-evaluators.md`, including its
+  documented separately in `docs/guides/11-custom-evaluators.md`, including its
   known bias and non-independence limitations.
+
+## What you learned
+
+- Three sources feed one evidence shape.
+- Resolution follows a fixed, recorded precedence and never falls back unless you allow it.
+- `overall` quality needs explicit weights.
+
+## Next
+
+[09. Execution](09-execution.md) covers how real calls produce the observations behind this evidence.

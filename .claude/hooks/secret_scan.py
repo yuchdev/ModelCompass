@@ -119,7 +119,7 @@ def _content_from_event(event: dict[str, object]) -> str:
     return "\n".join(parts)
 
 
-def _hook_mode() -> None:
+def _hook_mode():
     event = read_event()
     target = edited_path(event)
     if target and target.suffix.lower() in SKIP_SUFFIXES:
@@ -141,7 +141,7 @@ def _hook_mode() -> None:
     allow()
 
 
-def _cli_mode(paths: Iterable[str]) -> None:
+def _cli_mode(paths: Iterable[str]):
     total = 0
     for raw in paths:
         p = Path(raw)

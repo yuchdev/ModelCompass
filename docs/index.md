@@ -12,10 +12,10 @@ It helps you answer questions such as:
 
 ## Start here
 
-- [Quickstart](guides/quickstart.md)
+- [Quickstart](guides/01-quickstart.md)
 - [Configuration](configuration.md)
-- [Selection model](concepts/selection.md)
-- [Benchmarks](guides/benchmarks.md)
+- [Selection model](concepts/06-selection.md)
+- [Benchmarks](guides/10-benchmarks.md)
 - [Testing](testing.md)
 - [API reference](reference/api.md)
 

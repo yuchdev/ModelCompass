@@ -19,7 +19,7 @@ import sys
 from _common import REPO_ROOT, allow, append_log, edited_path, read_event
 
 
-def _run_ruff(args: list[str]) -> None:
+def _run_ruff(args: list[str]):
     try:
         subprocess.run(
             ["ruff", *args],
@@ -33,7 +33,7 @@ def _run_ruff(args: list[str]) -> None:
         sys.stderr.write(f"post_edit_format: ruff unavailable ({exc}); skipped.\n")
 
 
-def main() -> None:
+def main():
     event = read_event()
     target = edited_path(event)
     if target is None:

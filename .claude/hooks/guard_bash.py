@@ -31,7 +31,7 @@ DESTRUCTIVE: list[tuple[str, str]] = [
 PROD = re.compile(r"\b(prod|production)\b", re.IGNORECASE)
 
 
-def main() -> None:
+def main():
     event = read_event()
     command = str(tool_input(event).get("command", ""))
     if not command.strip():

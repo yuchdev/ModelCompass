@@ -1,12 +1,16 @@
-# Benchmarks
+# 10. Benchmarks
+
+**Level:** advanced · **Time:** 40 minutes · **Needs:** [08. Local storage](08-storage.md) and [09. Executing with LiteLLM](09-litellm.md)
+
+In this tutorial you will build a small dataset, run it against models under a budget, aggregate the scores, and feed them into selection. Steps 1 to 3 need no API key.
 
 `model_compass.benchmarks` runs deterministic, reproducible benchmarks
 against any `ExecutionBackend` and turns the results into task-scoped quality
-evidence consumed by selection. See `docs/concepts/quality.md` for how that
-evidence is resolved, and `docs/guides/custom-evaluators.md` for writing new
+evidence consumed by selection. See `docs/concepts/08-quality.md` for how that
+evidence is resolved, and `docs/guides/11-custom-evaluators.md` for writing new
 evaluators or using the optional LLM judge.
 
-## Dataset format
+## Step 1: Build a dataset
 
 A dataset is a JSONL file: one optional header record
 (`record_type: "dataset"`, carrying `name`, `version`, and an optional
@@ -39,7 +43,7 @@ assert reloaded == dataset
 `BenchmarkCase` is a frozen pydantic model, so a loaded dataset cannot be
 mutated during a run — there is no hidden mutation to worry about.
 
-### Deterministic dataset identity
+### Check the dataset identity
 
 `dataset.identity` returns a `DatasetIdentity` with `name`, `version`, and a
 `content_hash`: a SHA-256 hash computed over the dataset's cases,
@@ -51,7 +55,7 @@ between two runs even if its name and version string did not.
 
 See `examples/benchmarks/sample.jsonl` for a worked example covering every built-in evaluator. The legacy `sample-dataset.jsonl` file remains in the tree for compatibility with older docs and tests.
 
-## Running a benchmark
+## Step 2: Run a benchmark
 
 ```python
 from model_compass.benchmarks import BenchmarkRunConfig, RunnerBudget, run_benchmark
@@ -79,7 +83,7 @@ Before Issue 06 landed, tests used a fake backend
 (`tests/fixtures/fake_execution_backend.py`); the same `run_benchmark` call
 works unchanged against the real `LiteLLMBackend`.
 
-### Per-case isolation
+### Know what happens when a case fails
 
 A failed execution, a failed evaluation, or a budget-exhausted skip produces
 its own `BenchmarkResult` with `score=None` and a `metadata["error_category"]`
@@ -95,7 +99,7 @@ persistable, a caller that wants resumability can persist results
 incrementally via `ObservationStore.record_benchmark_result` as they arrive,
 rather than waiting for the whole run to finish.
 
-## Reproducibility
+## Step 3: Check what was recorded
 
 Every `BenchmarkRun` records: `dataset_id` (the dataset's name), `dataset_version`,
 `dataset_hash`, `started_at`/`ended_at`, `runner_version` (this package's
@@ -105,26 +109,26 @@ enough to explain what ran and with what settings — it is **not** a claim of
 bit-for-bit reproducible LLM output; providers can and do change model
 behavior over time even for an unchanged model id.
 
-## Aggregation
+## Step 4: Aggregate scores
 
 `benchmarks.summarize_quality(outcome.scored_cases, group_by="task")` returns
 one `QualitySummary` per `(model, task)` pair, each with a mean score, median
 score, optional pass rate, sample count, and a deterministic bootstrap
-confidence interval. See `docs/concepts/quality.md` for the full aggregation
+confidence interval. See `docs/concepts/08-quality.md` for the full aggregation
 and resolution-precedence rules, including why `group_by="overall"` requires
 explicit per-task weights.
 
-## Persisting results
+## Step 5: Persist results as evidence
 
 `BenchmarkRun` and `BenchmarkResult` are ordinary `model_compass.domain`
 records; any `ObservationStore` (SQLite or in-memory) can persist and query
 them with `record_benchmark_run` / `record_benchmark_result` /
 `query_benchmark_runs` / `query_benchmark_results`, and export/import them
-as JSONL with `export_jsonl` / `import_jsonl` (see `docs/guides/storage.md`).
+as JSONL with `export_jsonl` / `import_jsonl` (see `docs/guides/08-storage.md`).
 Convert a `QualitySummary` to evidence with `.to_quality_evidence()` and
 persist it with `record_quality_evidence` so selection can use it.
 
-## External evidence
+## Step 6: Import external evidence
 
 `benchmarks.import_external_evidence` converts externally obtained records
 (leaderboards, vendor-reported scores) into the same `QualityEvidence` shape.
@@ -134,7 +138,7 @@ normalized only for a known `scale` (`"0-1"`, `"0-100"`, `"percentage"`); an
 unrecognized scale is skipped or rejected, never assumed to already be
 normalized.
 
-## Live benchmarking and budget safety
+## Step 7: Benchmark live, within a budget
 
 Live, multi-model benchmarking is opt-in and bounded. `RunnerBudget` supports
 `max_total_cost`, `max_cost_per_model`, and `max_cases`; the runner stops
@@ -150,7 +154,7 @@ only runs against one explicitly named model and requires an explicit
 `MODEL_ANALYTICS_LIVE_BENCHMARK_BUDGET_USD` cost acknowledgement before it
 will make a real call.
 
-## CLI
+## Step 8: Score saved outputs from the CLI
 
 `model-compass benchmark --dataset FILE.jsonl --outputs OUTPUTS.json --model MODEL_ID`
 scores pre-collected string outputs against a **single-task** dataset
@@ -158,3 +162,14 @@ offline (no execution backend). It rejects multi-task datasets and cases
 using the `llm_judge` evaluator — use `run_benchmark` directly for those.
 Pass `--record` to persist the resulting quality evidence via the default
 analytics store.
+
+## What you learned
+
+- How a dataset is defined, hashed, and run.
+- That one failed case never discards the others.
+- How scores become task-scoped quality evidence for selection.
+- That live budgets are advisory, so keep them small.
+
+## Next
+
+[11. Custom evaluators](11-custom-evaluators.md) shows how to score outputs your own way.

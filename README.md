@@ -173,7 +173,7 @@ choice = analytics.select(profiles, request, policy=SelectionPolicy.CHEAPEST)
 print(choice.selected.model_id if choice.selected else "no selection")
 ```
 
-See the [quickstart guide](docs/guides/quickstart.md) for a fuller offline example.
+See the [quickstart guide](docs/guides/01-quickstart.md) for a fuller offline example.
 
 ## Architecture diagram
 

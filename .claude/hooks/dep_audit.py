@@ -27,7 +27,7 @@ def _try(cmd: list[str]) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def main() -> None:
+def main():
     event = read_event()
     target = edited_path(event)
     if target is None or target.name not in MANIFESTS:

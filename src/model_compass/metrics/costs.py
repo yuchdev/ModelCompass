@@ -108,7 +108,7 @@ def estimate_cost(
         if usage_values.get(key, Decimal(0)) > 0 and prices.get(key) is None:
             complete = False
 
-    for key, usage in sorted((unit_usage or {}).items()):
+    for key in sorted(unit_usage or {}):
         price = prices.get(key)
         priced = _add_priced_usage(key, usage_values[key], price, components, assumptions)
         if not priced and usage_values[key] > 0 and price is not None:

@@ -64,7 +64,7 @@ class StubPaymentBackend:
 # --------------------------------------------------------------------------- #
 # [Unit] — pure logic, no mocks, no I/O. Signal: no mock/runner markers.
 # --------------------------------------------------------------------------- #
-def test_discount_tier_below_threshold_is_none() -> None:
+def test_discount_tier_below_threshold_is_none():
     """[Unit] discount tier low: verifies a subtotal under 50.00 maps to NONE.
 
     Scenario: Call DiscountTier.from_subtotal(49.99) with a plain float, no mocks or I/O.
@@ -78,7 +78,7 @@ def test_discount_tier_below_threshold_is_none() -> None:
 # --------------------------------------------------------------------------- #
 # [Mock] — unit-scoped, but a collaborator is patched. Signal: mock./monkeypatch.
 # --------------------------------------------------------------------------- #
-def test_carrier_resolution_uses_lookup_table(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_carrier_resolution_uses_lookup_table(monkeypatch: pytest.MonkeyPatch):
     """[Mock] carrier resolution: verifies resolve_carrier delegates to its lookup table.
 
     Scenario: monkeypatch the module's _CARRIER_MAP to a controlled entry, then resolve a zone.
@@ -99,7 +99,7 @@ def test_carrier_resolution_uses_lookup_table(monkeypatch: pytest.MonkeyPatch) -
 # [Integration] — two+ real components wired together, external edge excluded.
 # Signal: real collaborators, no mock markers, no e2e runner.
 # --------------------------------------------------------------------------- #
-def test_order_store_round_trip(tmp_path: Path) -> None:
+def test_order_store_round_trip(tmp_path: Path):
     """[Integration] store round-trip: verifies a saved order reloads by order_id.
 
     Scenario: Persist an order to a real filesystem store rooted at tmp_path,
@@ -123,7 +123,7 @@ def test_order_store_round_trip(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 # [E2E] — a full user entry point driven end to end. Signal: CliRunner/TestClient.
 # --------------------------------------------------------------------------- #
-def test_process_order_cli_reports_status(tmp_path: Path) -> None:
+def test_process_order_cli_reports_status(tmp_path: Path):
     """[E2E] process-order CLI: verifies `orders process` prints the resolved order status.
 
     Scenario: Invoke the Typer app through CliRunner with a fixture order file and a

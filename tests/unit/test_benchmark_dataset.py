@@ -207,7 +207,7 @@ def test_example_sample_dataset_loads_and_exercises_every_known_evaluator():
     """[Unit] example dataset: examples/benchmarks/sample-dataset.jsonl stays valid and complete.
 
     Scenario: Loads the shipped example dataset and checks it covers every deterministic
-        evaluator id documented in docs/guides/custom-evaluators.md.
+        evaluator id documented in docs/guides/11-custom-evaluators.md.
     Boundaries: Real load_dataset_jsonl against a real repository file; no network.
     On failure, first check: the example dataset file versus KNOWN_EVALUATOR_IDS (minus llm_judge).
     """

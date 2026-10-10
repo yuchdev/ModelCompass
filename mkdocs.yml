@@ -29,28 +29,28 @@ nav:
       - Overview: architecture.md
       - Decision record: adr/architecture.md
   - Concepts:
-      - Models and pricing: concepts/models.md
-      - Pricing: concepts/pricing.md
-      - Request profiles: concepts/request-profile.md
-      - Cost estimation: concepts/cost-estimation.md
-      - Observations: concepts/observations.md
-      - Execution: concepts/execution.md
-      - Selection: concepts/selection.md
-      - Pareto analysis: concepts/pareto.md
-      - Quality evidence: concepts/quality.md
+      - 01 Models and requests: concepts/01-models.md
+      - 02 Pricing: concepts/02-pricing.md
+      - 03 Request profiles: concepts/03-request-profile.md
+      - 04 Cost estimation: concepts/04-cost-estimation.md
+      - 05 Observations: concepts/05-observations.md
+      - 06 Selection: concepts/06-selection.md
+      - 07 Pareto analysis: concepts/07-pareto.md
+      - 08 Quality evidence: concepts/08-quality.md
+      - 09 Execution: concepts/09-execution.md
   - Guides:
-      - Quickstart: guides/quickstart.md
-      - Catalogs: guides/catalogs.md
-      - Compare models: guides/compare-models.md
-      - Select model: guides/select-model.md
-      - Analytics and selection: guides/analytics.md
-      - Selection policies: guides/selection-policies.md
-      - Storage: guides/storage.md
-      - Offline use: guides/offline-use.md
-      - Executing with LiteLLM: guides/litellm.md
-      - Benchmarks: guides/benchmarks.md
-      - Custom evaluators: guides/custom-evaluators.md
-      - Releasing: guides/releasing.md
+      - 01 Quickstart: guides/01-quickstart.md
+      - 02 Catalogs: guides/02-catalogs.md
+      - 03 Offline use: guides/03-offline-use.md
+      - 04 Compare models: guides/04-compare-models.md
+      - 05 Select a model: guides/05-select-model.md
+      - 06 Analytics and selection: guides/06-analytics.md
+      - 07 Selection policies: guides/07-selection-policies.md
+      - 08 Local storage: guides/08-storage.md
+      - 09 Executing with LiteLLM: guides/09-litellm.md
+      - 10 Benchmarks: guides/10-benchmarks.md
+      - 11 Custom evaluators: guides/11-custom-evaluators.md
+      - 12 Releasing: guides/12-releasing.md
       - v0.1 release checklist: release-checklist.md
       - Post-v0.1 backlog: post-v0.1-backlog.md
   - Testing:

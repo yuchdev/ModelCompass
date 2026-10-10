@@ -1,9 +1,13 @@
-# Executing with LiteLLM
+# 09. Executing with LiteLLM
+
+**Level:** advanced · **Time:** 30 minutes · **Needs:** [06. Analytics and selection](06-analytics.md), a provider key for live steps
+
+In this tutorial you will make a real model call, stream it, handle failures safely, and close the loop by comparing the estimated cost with the actual one. Every step except the first live call can be run with a mock.
 
 `LiteLLMBackend` runs an `ExecutionRequest` through `litellm.acompletion` and normalizes
-the response. See [Execution](../concepts/execution.md) for the data model.
+the response. See [Execution](../concepts/09-execution.md) for the data model.
 
-## Basic use
+## Step 1: Make your first call
 
 ```python
 from model_compass.execution import ExecutionRequest, LiteLLMBackend
@@ -30,14 +34,14 @@ Options:
 Retries can multiply cost: each attempt may be billed. The count actually used is not
 reported by LiteLLM, so only the configured maximum is recorded.
 
-## Tools, structured output, routing
+## Step 2: Add tools, structured output, and routing
 
 `tools` and `response_format` on the request are forwarded unchanged. Returned tool calls
 are preserved in `result.tool_calls`; JSON output stays in `output_text`.
 `provider_routing` is sent as `extra_body={"provider": ...}` (OpenRouter provider routing)
 and is only applied when you set it.
 
-## Streaming
+## Step 3: Stream the response
 
 Set `stream=True` on the request. The backend consumes a real provider stream
 (`stream_options={"include_usage": True}`), measures time to first token with a monotonic
@@ -50,14 +54,14 @@ with `metadata["partial_output"] = True`.
 Usage and cost are only available if the provider sends them in the stream; otherwise they
 are `None`.
 
-## Errors and secrets
+## Step 4: Handle errors without leaking secrets
 
 LiteLLM and generic provider exceptions are mapped to `ExecutionError` subclasses. Messages
 contain only the exception *type* — provider text is dropped because it can echo
 credentials. Exceptions keep the original as `__cause__` for debugging; do not log
 tracebacks where that matters.
 
-## Select, execute, reconcile
+## Step 5: Select, execute, reconcile
 
 ```python
 from decimal import Decimal
@@ -83,7 +87,7 @@ else:
 Pass `observation_sink=NullObservationSink()` to skip persistence. Selection reads evidence
 from the facade's own store, so use an in-memory store (as above) to avoid touching disk.
 
-## Testing
+## Step 6: Test without credentials
 
 Mandatory tests mock LiteLLM at the `completion_call` boundary and need no credentials:
 
@@ -107,3 +111,14 @@ MODEL_ANALYTICS_LIVE_MAX_COST_USD=0.01   # optional ceiling checked before the r
 ```
 
 The live test sends a tiny prompt and records into a temporary database.
+
+## What you learned
+
+- How to call a model through `LiteLLMBackend`, with retries and tools.
+- That streaming records an observation only after the stream ends or fails.
+- That errors never carry provider text, because it can echo credentials.
+- How `select_and_execute` returns a reconciliation of estimated and actual cost.
+
+## Next
+
+[10. Benchmarks](10-benchmarks.md) runs many requests against a dataset to produce quality evidence. See [Execution](../concepts/09-execution.md) for the data model.
